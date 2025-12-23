@@ -26,13 +26,17 @@ A modern, dark-mode ecommerce website for selling notebooks, built with Next.js.
 npm install
 ```
 
-2. Create a `.env.local` file in the root directory:
+2. Create a `.env.local` file in the root directory (optional):
 
 ```env
-NEXT_PUBLIC_API_URL=http://localhost:5000/api
+# For production (default)
+NEXT_PUBLIC_API_URL=https://ijack-server.onrender.com/api
+
+# For local development, use:
+# NEXT_PUBLIC_API_URL=http://localhost:5000/api
 ```
 
-3. Make sure the backend server is running (see `ijack-server` directory).
+**Note:** The frontend is configured to use the production backend by default (`https://ijack-server.onrender.com/api`). If you want to use a local backend, create a `.env.local` file with the local URL.
 
 4. Run the development server:
 
