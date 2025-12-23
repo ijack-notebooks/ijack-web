@@ -19,8 +19,12 @@ export default function Notebooks() {
       const response = await api.get("/notebooks");
       setNotebooks(response.data);
     } catch (error) {
-      setError("Failed to load notebooks");
-      console.error(error);
+      console.error("Error fetching notebooks:", error);
+      const errorMessage =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to load notebooks";
+      setError(`Failed to load notebooks: ${errorMessage}`);
     } finally {
       setLoading(false);
     }
@@ -70,4 +74,3 @@ export default function Notebooks() {
     </>
   );
 }
-
