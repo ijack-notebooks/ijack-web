@@ -38,10 +38,41 @@ export default function ProductCard({ notebook }) {
     }, 300);
   };
 
+  // Get image URL - if it's a relative path, prepend the API base URL
+  const getImageUrl = () => {
+    if (!notebook.image) {
+      return null;
+    }
+    // If image starts with /uploads, it's a server path
+    if (notebook.image.startsWith("/uploads")) {
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL 
+        ? process.env.NEXT_PUBLIC_API_URL.replace("/api", "")
+        : "https://ijack-server.onrender.com";
+      return `${baseUrl}${notebook.image}`;
+    }
+    // If it's already a full URL, return as is
+    return notebook.image;
+  };
+
+  const imageUrl = getImageUrl();
+
   return (
     <div className="bg-gray-800 rounded-lg overflow-hidden shadow-lg hover:shadow-xl transition-shadow border border-gray-700">
-      <div className="h-64 bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center">
-        <span className="text-6xl">📓</span>
+      <div className="h-64 bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center overflow-hidden">
+        {imageUrl ? (
+          <img
+            src={imageUrl}
+            alt={notebook.name}
+            className="w-full h-full object-cover"
+            onError={(e) => {
+              // Fallback to emoji if image fails to load
+              e.target.style.display = "none";
+              e.target.parentElement.innerHTML = '<span class="text-6xl">📓</span>';
+            }}
+          />
+        ) : (
+          <span className="text-6xl">📓</span>
+        )}
       </div>
       <div className="p-6">
         <h3 className="text-xl font-semibold text-white mb-2">

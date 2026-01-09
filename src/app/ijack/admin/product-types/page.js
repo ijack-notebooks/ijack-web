@@ -9,6 +9,7 @@ import { formatPrice } from "../../../../lib/currency";
 export default function ProductTypes() {
   const { admin } = useAdminAuth();
   const [products, setProducts] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [categoryStats, setCategoryStats] = useState({});
@@ -19,8 +20,32 @@ export default function ProductTypes() {
   useEffect(() => {
     if (admin) {
       fetchProducts();
+      fetchCategories();
     }
   }, [admin]);
+
+  const fetchCategories = async () => {
+    try {
+      const response = await api.get("/admin/categories");
+      // Sort categories alphabetically
+      const sortedCategories = (response.data || []).sort((a, b) =>
+        a.localeCompare(b)
+      );
+      setCategories(sortedCategories);
+    } catch (error) {
+      console.error("Failed to load categories:", error);
+      // Fallback: get categories from products
+      try {
+        const productsResponse = await api.get("/notebooks");
+        const uniqueCategories = [
+          ...new Set(productsResponse.data.map((p) => p.category)),
+        ].sort((a, b) => a.localeCompare(b));
+        setCategories(uniqueCategories);
+      } catch (err) {
+        setCategories([]);
+      }
+    }
+  };
 
   const fetchProducts = async () => {
     try {
@@ -68,18 +93,25 @@ export default function ProductTypes() {
     try {
       setError("");
       setSuccess("");
-      // Category will be created when first product is added with this category
-      setSuccess(`Category "${newCategory}" is ready. Add products to this category in the Products List page.`);
+      await api.post("/admin/categories", { name: newCategory.trim() });
+      setSuccess(`Category "${newCategory}" created successfully!`);
       setNewCategory("");
       setShowCreateCategory(false);
+      // Refresh categories and products to update stats
+      fetchCategories();
+      fetchProducts();
     } catch (error) {
-      setError("Failed to create category");
+      setError(error.response?.data?.message || "Failed to create category");
       console.error(error);
     }
   };
 
   const handleDeleteAll = async () => {
-    if (!confirm("Are you sure you want to delete ALL products? This action cannot be undone.")) {
+    if (
+      !confirm(
+        "Are you sure you want to delete ALL products? This action cannot be undone."
+      )
+    ) {
       return;
     }
 
@@ -96,7 +128,15 @@ export default function ProductTypes() {
     }
   };
 
-  const categories = Object.keys(categoryStats);
+  // Merge categories from Category model with categories from products
+  const allCategoryNames = [
+    ...new Set([...categories, ...Object.keys(categoryStats)]),
+  ];
+
+  // Filter to only show categories that exist (either in Category model or have products)
+  const displayCategories = allCategoryNames.filter(
+    (cat) => categories.includes(cat) || categoryStats[cat]
+  );
 
   return (
     <>
@@ -143,7 +183,9 @@ export default function ProductTypes() {
           {/* Create Category Form */}
           {showCreateCategory && (
             <div className="bg-gray-800 rounded-lg p-6 border border-gray-700 mb-6">
-              <h3 className="text-xl font-bold text-white mb-4">Create New Category</h3>
+              <h3 className="text-xl font-bold text-white mb-4">
+                Create New Category
+              </h3>
               <form onSubmit={handleCreateCategory} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
@@ -158,7 +200,7 @@ export default function ProductTypes() {
                     required
                   />
                   <p className="text-xs text-gray-400 mt-1">
-                    Note: Category will be created when you add the first product with this category name.
+                    Category will be available immediately for product creation.
                   </p>
                 </div>
                 <div className="flex gap-3">
@@ -184,84 +226,90 @@ export default function ProductTypes() {
           )}
 
           {/* Category Statistics */}
-          {categories.length === 0 ? (
+          {displayCategories.length === 0 ? (
             <div className="bg-gray-800 rounded-lg p-12 border border-gray-700 text-center">
               <p className="text-gray-400 text-lg mb-4">No categories found</p>
-              <p className="text-gray-500 text-sm">Create a new category to get started</p>
+              <p className="text-gray-500 text-sm">
+                Create a new category to get started
+              </p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-              {categories.map((category) => (
-              <div
-                key={category}
-                className="bg-gray-800 rounded-lg p-6 border border-gray-700"
-              >
-                <h3 className="text-xl font-bold text-white mb-4">{category}</h3>
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-400">Products:</span>
-                    <span className="text-white font-semibold">
-                      {categoryStats[category].count}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-400">Total Stock:</span>
-                    <span className="text-white font-semibold">
-                      {categoryStats[category].totalStock} units
-                    </span>
+              {displayCategories.map((category) => (
+                <div
+                  key={category}
+                  className="bg-gray-800 rounded-lg p-6 border border-gray-700"
+                >
+                  <h3 className="text-xl font-bold text-white mb-4">
+                    {category}
+                  </h3>
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-400">Products:</span>
+                      <span className="text-white font-semibold">
+                        {categoryStats[category]?.count || 0}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-400">Total Stock:</span>
+                      <span className="text-white font-semibold">
+                        {categoryStats[category]?.totalStock || 0} units
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))}
             </div>
           )}
 
           {/* Products by Category */}
-          {categories.length > 0 && (
+          {displayCategories.length > 0 && (
             <div className="space-y-8">
-              {categories.map((category) => {
-              const categoryProducts = products.filter(
-                (p) => p.category === category
-              );
-              return (
-                <div
-                  key={category}
-                  className="bg-gray-800 rounded-lg border border-gray-700"
-                >
-                  <div className="p-6 border-b border-gray-700">
-                    <h2 className="text-2xl font-bold text-white">{category}</h2>
-                    <p className="text-gray-400 text-sm mt-1">
-                      {categoryProducts.length} product(s) in this category
-                    </p>
-                  </div>
-                  <div className="p-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {categoryProducts.map((product) => (
-                        <div
-                          key={product._id}
-                          className="bg-gray-700 rounded-lg p-4 border border-gray-600"
-                        >
-                          <h4 className="text-lg font-semibold text-white mb-2">
-                            {product.name}
-                          </h4>
-                          <p className="text-sm text-gray-400 mb-3 line-clamp-2">
-                            {product.description}
-                          </p>
-                          <div className="flex justify-between items-center text-sm">
-                            <span className="text-blue-400 font-semibold">
-                              {formatPrice(product.price)}
-                            </span>
-                            <span className="text-gray-400">
-                              Stock: {product.stockQuantity}
-                            </span>
+              {displayCategories.map((category) => {
+                const categoryProducts = products.filter(
+                  (p) => p.category === category
+                );
+                return (
+                  <div
+                    key={category}
+                    className="bg-gray-800 rounded-lg border border-gray-700"
+                  >
+                    <div className="p-6 border-b border-gray-700">
+                      <h2 className="text-2xl font-bold text-white">
+                        {category}
+                      </h2>
+                      <p className="text-gray-400 text-sm mt-1">
+                        {categoryProducts.length} product(s) in this category
+                      </p>
+                    </div>
+                    <div className="p-6">
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {categoryProducts.map((product) => (
+                          <div
+                            key={product._id}
+                            className="bg-gray-700 rounded-lg p-4 border border-gray-600"
+                          >
+                            <h4 className="text-lg font-semibold text-white mb-2">
+                              {product.name}
+                            </h4>
+                            <p className="text-sm text-gray-400 mb-3 line-clamp-2">
+                              {product.description}
+                            </p>
+                            <div className="flex justify-between items-center text-sm">
+                              <span className="text-blue-400 font-semibold">
+                                {formatPrice(product.price)}
+                              </span>
+                              <span className="text-gray-400">
+                                Stock: {product.stockQuantity}
+                              </span>
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
             </div>
           )}
         </div>
@@ -269,4 +317,3 @@ export default function ProductTypes() {
     </>
   );
 }
-
