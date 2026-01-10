@@ -111,16 +111,49 @@ export default function ProductsList() {
     setSuccess("");
 
     try {
+      // Validate required fields
+      if (
+        !formData.name ||
+        !formData.description ||
+        !formData.price ||
+        !formData.category ||
+        !formData.pages ||
+        !formData.size ||
+        formData.stockQuantity === "" ||
+        formData.stockQuantity === null
+      ) {
+        setError("Please fill in all required fields");
+        return;
+      }
+
+      // Validate numeric fields
+      const price = parseFloat(formData.price);
+      const pages = parseInt(formData.pages);
+      const stockQuantity = parseInt(formData.stockQuantity);
+
+      if (isNaN(price) || price < 0) {
+        setError("Please enter a valid price (must be a positive number)");
+        return;
+      }
+      if (isNaN(pages) || pages < 1) {
+        setError("Please enter a valid number of pages (must be at least 1)");
+        return;
+      }
+      if (isNaN(stockQuantity) || stockQuantity < 0) {
+        setError("Please enter a valid stock quantity (must be 0 or greater)");
+        return;
+      }
+
       // Create FormData for file upload
       const formDataToSend = new FormData();
-      formDataToSend.append("name", formData.name);
-      formDataToSend.append("description", formData.description);
-      formDataToSend.append("price", formData.price);
-      formDataToSend.append("category", formData.category);
-      formDataToSend.append("pages", formData.pages);
-      formDataToSend.append("size", formData.size);
-      formDataToSend.append("stockQuantity", formData.stockQuantity);
-      formDataToSend.append("inStock", formData.inStock);
+      formDataToSend.append("name", formData.name.trim());
+      formDataToSend.append("description", formData.description.trim());
+      formDataToSend.append("price", price.toString());
+      formDataToSend.append("category", formData.category.trim());
+      formDataToSend.append("pages", pages.toString());
+      formDataToSend.append("size", formData.size.trim());
+      formDataToSend.append("stockQuantity", stockQuantity.toString());
+      formDataToSend.append("inStock", formData.inStock ? "true" : "false");
 
       if (imageFile) {
         formDataToSend.append("image", imageFile);
@@ -128,9 +161,15 @@ export default function ProductsList() {
 
       // Use axios with FormData (need to set Content-Type header)
       const token = localStorage.getItem("adminToken");
+      if (!token) {
+        setError("You are not authenticated. Please log in again.");
+        return;
+      }
+
       const API_URL =
         process.env.NEXT_PUBLIC_API_URL ||
         "https://ijack-server.onrender.com/api";
+
       const response = await axios.post(
         `${API_URL}/admin/products`,
         formDataToSend,
@@ -139,6 +178,7 @@ export default function ProductsList() {
             "Content-Type": "multipart/form-data",
             Authorization: `Bearer ${token}`,
           },
+          timeout: 60000, // 60 seconds timeout for file uploads
         }
       );
 
@@ -160,8 +200,22 @@ export default function ProductsList() {
       fetchProducts();
       fetchCategories();
     } catch (error) {
-      setError(error.response?.data?.message || "Failed to create product");
-      console.error(error);
+      console.error("Product creation error:", error);
+      if (error.response) {
+        // Server responded with error
+        setError(
+          error.response.data?.message ||
+            `Failed to create product: ${error.response.status} ${error.response.statusText}`
+        );
+      } else if (error.request) {
+        // Request was made but no response received
+        setError(
+          "No response from server. Please check your connection and try again."
+        );
+      } else {
+        // Something else happened
+        setError(error.message || "Failed to create product");
+      }
     }
   };
 
