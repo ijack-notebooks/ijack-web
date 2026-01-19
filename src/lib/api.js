@@ -20,9 +20,14 @@ const api = axios.create({
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    // Don't log 401 errors for /auth/me endpoint - these are expected when tokens are invalid/expired
+    const isAuthCheck = error.config?.url === "/auth/me" && error.response?.status === 401;
+    
     if (error.response) {
       // Server responded with error status
-      console.error("API Error:", error.response.status, error.response.data);
+      if (!isAuthCheck) {
+        console.error("API Error:", error.response.status, error.response.data);
+      }
     } else if (error.request) {
       // Request was made but no response received
       console.error("API Error: No response received", error.request);

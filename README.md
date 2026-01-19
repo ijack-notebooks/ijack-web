@@ -33,7 +33,7 @@ npm install
 NEXT_PUBLIC_API_URL=https://ijack-server.onrender.com/api
 
 # For local development, use:
-# NEXT_PUBLIC_API_URL=http://localhost:5000/api
+# NEXT_PUBLIC_API_URL=http://localhost:5002/api
 ```
 
 **Note:** The frontend is configured to use the production backend by default (`https://ijack-server.onrender.com/api`). If you want to use a local backend, create a `.env.local` file with the local URL.

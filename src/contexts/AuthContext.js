@@ -23,6 +23,10 @@ export function AuthProvider({ children }) {
         setUser(response.data.user);
       }
     } catch (error) {
+      // Silently handle 401 errors (invalid/expired token) - this is expected behavior
+      if (error.response?.status !== 401) {
+        console.error("Auth check error:", error);
+      }
       localStorage.removeItem("token");
       setUser(null);
     } finally {
