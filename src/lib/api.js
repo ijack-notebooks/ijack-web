@@ -42,8 +42,8 @@ api.interceptors.response.use(
 // Add token to requests (check for admin token first, then regular token)
 api.interceptors.request.use((config) => {
   if (typeof window !== "undefined") {
-    // Check if this is an admin route
-    const isAdminRoute = config.url?.startsWith("/admin");
+    // Check if this is an admin route or Supabase route (both need admin token)
+    const isAdminRoute = config.url?.startsWith("/admin") || config.url?.startsWith("/supabase");
     const token = isAdminRoute
       ? localStorage.getItem("adminToken")
       : localStorage.getItem("token");

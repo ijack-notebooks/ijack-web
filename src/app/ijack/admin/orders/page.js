@@ -13,16 +13,32 @@ export default function AllOrders() {
   const [error, setError] = useState("");
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [statusFilter, setStatusFilter] = useState("all");
+  const [paymentFilter, setPaymentFilter] = useState("all");
 
   const fetchOrders = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await api.get("/admin/orders");
+      // Try Supabase first, fallback to MongoDB
+      let response;
+      try {
+        response = await api.get("/supabase/orders");
+      } catch (supabaseError) {
+        console.warn("Supabase orders failed, falling back to MongoDB:", supabaseError);
+        // Fallback to MongoDB
+        response = await api.get("/admin/orders");
+      }
+      
       let filteredOrders = response.data;
 
       if (statusFilter !== "all") {
         filteredOrders = filteredOrders.filter(
           (order) => order.status === statusFilter
+        );
+      }
+
+      if (paymentFilter !== "all") {
+        filteredOrders = filteredOrders.filter(
+          (order) => order.payment?.paymentStatus === paymentFilter
         );
       }
 
@@ -33,7 +49,7 @@ export default function AllOrders() {
     } finally {
       setLoading(false);
     }
-  }, [statusFilter]);
+  }, [statusFilter, paymentFilter]);
 
   useEffect(() => {
     if (admin) {
@@ -79,8 +95,13 @@ export default function AllOrders() {
           <div className="bg-gray-800 rounded-lg border border-gray-700">
             <div className="p-6 border-b border-gray-700">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                <h2 className="text-2xl font-bold text-white">Orders</h2>
-                <div className="flex gap-3">
+                <div className="flex items-center gap-3">
+                  <h2 className="text-2xl font-bold text-white">Orders</h2>
+                  <div className="bg-green-900/30 border border-green-700 text-green-300 px-2 py-1 rounded text-xs font-medium">
+                    📊 Supabase
+                  </div>
+                </div>
+                <div className="flex gap-3 flex-wrap">
                   <button
                     onClick={fetchOrders}
                     className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors text-sm font-medium"
@@ -98,6 +119,16 @@ export default function AllOrders() {
                     <option value="shipped">Shipped</option>
                     <option value="delivered">Delivered</option>
                     <option value="cancelled">Cancelled</option>
+                  </select>
+                  <select
+                    value={paymentFilter}
+                    onChange={(e) => setPaymentFilter(e.target.value)}
+                    className="bg-gray-700 text-white px-4 py-2 rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="all">All Payments</option>
+                    <option value="SUCCESS">Paid</option>
+                    <option value="PENDING">Pending Payment</option>
+                    <option value="FAILED">Failed</option>
                   </select>
                 </div>
               </div>
@@ -137,7 +168,7 @@ export default function AllOrders() {
                   {orders.length === 0 ? (
                     <tr>
                       <td
-                        colSpan="7"
+                        colSpan="8"
                         className="px-6 py-8 text-center text-gray-400"
                       >
                         No orders found

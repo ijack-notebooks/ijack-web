@@ -22,10 +22,20 @@ export default function AdminPanel() {
 
   const fetchStats = useCallback(async () => {
     try {
-      const response = await api.get("/admin/stats");
-      setStats(response.data);
+      // Try Supabase first, fallback to MongoDB
+      let response;
+      try {
+        response = await api.get("/supabase/stats");
+        setStats(response.data);
+      } catch (supabaseError) {
+        console.warn("Supabase stats failed, falling back to MongoDB:", supabaseError);
+        // Fallback to MongoDB
+        response = await api.get("/admin/stats");
+        setStats(response.data);
+      }
     } catch (error) {
       console.error("Failed to load stats:", error);
+      setError("Failed to load statistics");
     } finally {
       setLoading(false);
     }
@@ -55,8 +65,15 @@ export default function AdminPanel() {
       <main className="min-h-screen bg-gray-900 py-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="mb-8">
-            <h2 className="text-3xl font-bold text-white mb-2">Dashboard</h2>
-            <p className="text-gray-400">Manage orders and view statistics</p>
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-3xl font-bold text-white mb-2">Dashboard</h2>
+                <p className="text-gray-400">Manage orders and view statistics</p>
+              </div>
+              <div className="bg-green-900/30 border border-green-700 text-green-300 px-3 py-1 rounded-full text-xs font-medium">
+                📊 Supabase Data
+              </div>
+            </div>
           </div>
 
           {error && (
