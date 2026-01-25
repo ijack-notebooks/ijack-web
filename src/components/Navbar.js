@@ -35,6 +35,12 @@ export default function Navbar() {
             {user ? (
               <>
                 <Link
+                  href="/orders"
+                  className="text-gray-300 hover:text-white transition-colors"
+                >
+                  My Orders
+                </Link>
+                <Link
                   href="/cart"
                   className="relative text-gray-300 hover:text-white transition-colors"
                 >

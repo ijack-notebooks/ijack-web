@@ -142,10 +142,16 @@ export default function OrderConfirmation() {
 
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link
-                href="/notebooks"
+                href="/orders"
                 className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-3 rounded-lg transition-colors"
               >
-                Continue Shopping
+                View My Orders
+              </Link>
+              <Link
+                href="/notebooks"
+                className="bg-gray-700 hover:bg-gray-600 text-white font-semibold px-6 py-3 rounded-lg transition-colors"
+              >
+                Shop More
               </Link>
               <Link
                 href="/"

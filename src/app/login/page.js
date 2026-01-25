@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "../../contexts/AuthContext";
@@ -11,8 +11,17 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
+  const { user, loading: authLoading, login } = useAuth();
   const router = useRouter();
+
+  useEffect(() => {
+    if (authLoading) return;
+
+    // If user is already logged in, redirect to notebooks
+    if (user) {
+      router.push("/notebooks");
+    }
+  }, [user, authLoading, router]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -29,6 +38,30 @@ export default function Login() {
 
     setLoading(false);
   };
+
+  // Show loading state while checking auth
+  if (authLoading) {
+    return (
+      <>
+        <Navbar />
+        <main className="min-h-screen bg-gray-900 flex items-center justify-center">
+          <div className="text-white text-xl">Loading...</div>
+        </main>
+      </>
+    );
+  }
+
+  // Don't render login form if user is already logged in
+  if (user) {
+    return (
+      <>
+        <Navbar />
+        <main className="min-h-screen bg-gray-900 flex items-center justify-center">
+          <div className="text-white text-xl">Redirecting...</div>
+        </main>
+      </>
+    );
+  }
 
   return (
     <>

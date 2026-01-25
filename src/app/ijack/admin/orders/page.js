@@ -120,6 +120,9 @@ export default function AllOrders() {
                       Amount
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                      Payment
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
                       Status
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
@@ -170,6 +173,19 @@ export default function AllOrders() {
                           <div className="text-sm font-semibold text-blue-400">
                             {formatPrice(order.totalAmount)}
                           </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span
+                            className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                              order.payment?.paymentStatus === "SUCCESS"
+                                ? "bg-green-900 text-green-300"
+                                : order.payment?.paymentStatus === "FAILED"
+                                ? "bg-red-900 text-red-300"
+                                : "bg-yellow-900 text-yellow-300"
+                            }`}
+                          >
+                            {order.payment?.paymentStatus || "PENDING"}
+                          </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span
@@ -248,7 +264,41 @@ export default function AllOrders() {
                       {formatPrice(selectedOrder.totalAmount)}
                     </p>
                   </div>
+                  <div>
+                    <p className="text-gray-400 text-sm">Payment Status</p>
+                    <span
+                      className={`px-2 py-1 text-xs font-semibold rounded-full inline-block mt-1 ${
+                        selectedOrder.payment?.paymentStatus === "SUCCESS"
+                          ? "bg-green-900 text-green-300"
+                          : selectedOrder.payment?.paymentStatus === "FAILED"
+                          ? "bg-red-900 text-red-300"
+                          : "bg-yellow-900 text-yellow-300"
+                      }`}
+                    >
+                      {selectedOrder.payment?.paymentStatus || "PENDING"}
+                    </span>
+                  </div>
                 </div>
+
+                {selectedOrder.payment && (
+                  <div>
+                    <p className="text-gray-400 text-sm mb-3">Payment Details</p>
+                    <div className="bg-gray-700 rounded-lg p-4 space-y-2">
+                      <p className="text-white text-sm">
+                        <span className="text-gray-400">Merchant Order ID:</span>{" "}
+                        {selectedOrder.payment.merchantOrderId || "N/A"}
+                      </p>
+                      <p className="text-white text-sm">
+                        <span className="text-gray-400">Transaction ID:</span>{" "}
+                        {selectedOrder.payment.phonepeTransactionId || "N/A"}
+                      </p>
+                      <p className="text-white text-sm">
+                        <span className="text-gray-400">Method:</span>{" "}
+                        {selectedOrder.payment.paymentMethod || "Online"}
+                      </p>
+                    </div>
+                  </div>
+                )}
 
                 <div>
                   <p className="text-gray-400 text-sm mb-2">Order Status</p>

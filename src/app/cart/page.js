@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "../../contexts/AuthContext";
 import { useCart } from "../../contexts/CartContext";
@@ -9,12 +10,39 @@ import { formatPrice, formatPriceWithDecimals } from "../../lib/currency";
 
 export default function Cart() {
   const { cart, updateQuantity, removeFromCart, getTotalPrice } = useCart();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const router = useRouter();
 
+  useEffect(() => {
+    if (authLoading) return;
+
+    if (!user) {
+      router.push("/login");
+    }
+  }, [user, authLoading, router]);
+
+  // Show loading state while checking auth
+  if (authLoading) {
+    return (
+      <>
+        <Navbar />
+        <main className="min-h-screen bg-gray-900 flex items-center justify-center">
+          <div className="text-white text-xl">Loading...</div>
+        </main>
+      </>
+    );
+  }
+
+  // Don't render if user is not logged in
   if (!user) {
-    router.push("/login");
-    return null;
+    return (
+      <>
+        <Navbar />
+        <main className="min-h-screen bg-gray-900 flex items-center justify-center">
+          <div className="text-white text-xl">Redirecting...</div>
+        </main>
+      </>
+    );
   }
 
   if (cart.length === 0) {

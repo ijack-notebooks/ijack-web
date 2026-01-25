@@ -79,19 +79,20 @@ export default function AdminPanel() {
                 <p className="text-3xl font-bold text-blue-400">
                   {formatPrice(stats.totalRevenue)}
                 </p>
+                <p className="text-xs text-gray-500 mt-1">(Successful payments)</p>
               </div>
               <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-                <h3 className="text-gray-400 text-sm mb-2">Pending Orders</h3>
-                <p className="text-3xl font-bold text-yellow-400">
-                  {stats.ordersByStatus.find((s) => s._id === "pending")
+                <h3 className="text-gray-400 text-sm mb-2">Paid Orders</h3>
+                <p className="text-3xl font-bold text-green-400">
+                  {stats.paymentStats.find((s) => s._id === "SUCCESS")
                     ?.count || 0}
                 </p>
               </div>
               <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-                <h3 className="text-gray-400 text-sm mb-2">Delivered</h3>
-                <p className="text-3xl font-bold text-green-400">
-                  {stats.ordersByStatus.find((s) => s._id === "delivered")
-                    ?.count || 0}
+                <h3 className="text-gray-400 text-sm mb-2">Pending/Failed</h3>
+                <p className="text-3xl font-bold text-red-400">
+                  {(stats.paymentStats.find((s) => s._id === "PENDING")?.count || 0) + 
+                   (stats.paymentStats.find((s) => s._id === "FAILED")?.count || 0)}
                 </p>
               </div>
             </div>

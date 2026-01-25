@@ -10,7 +10,7 @@ import { formatPrice } from "../../lib/currency";
 
 export default function Checkout() {
   const { cart, getTotalPrice, clearCart } = useCart();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const router = useRouter();
 
   const [formData, setFormData] = useState({
@@ -28,6 +28,8 @@ export default function Checkout() {
   const [error, setError] = useState("");
 
   useEffect(() => {
+    if (authLoading) return;
+
     if (!user) {
       router.push("/login");
       return;
@@ -37,18 +39,31 @@ export default function Checkout() {
       router.push("/cart");
       return;
     }
-  }, [user, cart.length, router]);
+  }, [user, authLoading, cart.length, router]);
 
   // Update form data when user changes
   useEffect(() => {
-    if (user) {
+    if (user && (!formData.name || !formData.email)) {
       setFormData((prev) => ({
         ...prev,
         name: prev.name || user.username || "",
         email: prev.email || user.email || "",
       }));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
+
+  // Show loading state while checking auth
+  if (authLoading) {
+    return (
+      <>
+        <Navbar />
+        <main className="min-h-screen bg-gray-900 flex items-center justify-center">
+          <div className="text-white text-xl">Loading...</div>
+        </main>
+      </>
+    );
+  }
 
   // Don't render if user is not logged in or cart is empty
   if (!user || cart.length === 0) {
@@ -94,12 +109,22 @@ export default function Checkout() {
         },
       };
 
-      const response = await api.post("/orders", orderData);
-      clearCart();
-      router.push(`/order-confirmation/${response.data._id}`);
+      // Initiate payment with PhonePe
+      const paymentResponse = await api.post("/payment/initiate", orderData);
+
+      if (paymentResponse.data.success && paymentResponse.data.paymentUrl) {
+        // Store merchantOrderId for retrieval in callback
+        if (paymentResponse.data.merchantOrderId) {
+          sessionStorage.setItem("lastMerchantOrderId", paymentResponse.data.merchantOrderId);
+        }
+        // Redirect to PhonePe payment page
+        window.location.href = paymentResponse.data.paymentUrl;
+      } else {
+        setError(paymentResponse.data.message || "Failed to initiate payment");
+        setLoading(false);
+      }
     } catch (error) {
-      setError(error.response?.data?.message || "Failed to place order");
-    } finally {
+      setError(error.response?.data?.message || "Failed to initiate payment");
       setLoading(false);
     }
   };
