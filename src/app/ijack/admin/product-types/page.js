@@ -83,7 +83,7 @@ export default function ProductTypes() {
     );
   }
 
-  const handleCreateCategory = async (e) => {
+  const handleCreateCategory = async (e) => { 
     e.preventDefault();
     if (!newCategory.trim()) {
       setError("Category name cannot be empty");
