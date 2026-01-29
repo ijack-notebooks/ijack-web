@@ -4,13 +4,17 @@ import { useState, useEffect } from "react";
 import axios from "axios";
 import Image from "next/image";
 import { useAdminAuth } from "../../../../contexts/AdminAuthContext";
-import AdminNavbar from "../../../../components/AdminNavbar";
 import api from "../../../../lib/api";
 import { formatPrice } from "../../../../lib/currency";
 
 // Helper function to get image URL
 const getImageUrl = (imagePath) => {
   if (!imagePath) return null;
+  // If it's already a full URL (Supabase or other), return as is
+  if (imagePath.startsWith("http://") || imagePath.startsWith("https://")) {
+    return imagePath;
+  }
+  // If it's a local upload path, construct full URL
   if (imagePath.startsWith("/uploads")) {
     const baseUrl = process.env.NEXT_PUBLIC_API_URL
       ? process.env.NEXT_PUBLIC_API_URL.replace("/api", "")
@@ -66,7 +70,7 @@ export default function ProductsList() {
       const response = await api.get("/admin/categories");
       // Sort categories alphabetically
       const sortedCategories = (response.data || []).sort((a, b) =>
-        a.localeCompare(b)
+        a.localeCompare(b),
       );
       setCategories(sortedCategories);
     } catch (error) {
@@ -179,7 +183,7 @@ export default function ProductsList() {
             Authorization: `Bearer ${token}`,
           },
           timeout: 60000, // 60 seconds timeout for file uploads
-        }
+        },
       );
 
       setSuccess("Product created successfully!");
@@ -205,17 +209,39 @@ export default function ProductsList() {
         // Server responded with error
         setError(
           error.response.data?.message ||
-            `Failed to create product: ${error.response.status} ${error.response.statusText}`
+            `Failed to create product: ${error.response.status} ${error.response.statusText}`,
         );
       } else if (error.request) {
         // Request was made but no response received
         setError(
-          "No response from server. Please check your connection and try again."
+          "No response from server. Please check your connection and try again.",
         );
       } else {
         // Something else happened
         setError(error.message || "Failed to create product");
       }
+    }
+  };
+
+  const handleCleanupImages = async () => {
+    if (
+      !confirm(
+        "Are you sure you want to delete all old product images from the server folder? This will only delete local files, not Supabase images.",
+      )
+    ) {
+      return;
+    }
+
+    try {
+      setError("");
+      const response = await api.post("/admin/cleanup-images");
+      setSuccess(
+        `Cleanup completed! Deleted ${response.data.deletedCount} old images from server folder.`,
+      );
+      setTimeout(() => setSuccess(""), 5000);
+    } catch (error) {
+      setError(error.response?.data?.message || "Failed to cleanup images");
+      console.error(error);
     }
   };
 
@@ -247,7 +273,6 @@ export default function ProductsList() {
 
   return (
     <>
-      <AdminNavbar title="Products List" />
       <main className="min-h-screen bg-gray-900 py-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           {error && (
@@ -269,12 +294,20 @@ export default function ProductsList() {
             >
               {showCreateForm ? "✕ Cancel" : "+ New Product"}
             </button>
-            <button
-              onClick={fetchProducts}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors text-sm font-medium"
-            >
-              🔄 Refresh
-            </button>
+            <div className="flex gap-3">
+              <button
+                onClick={handleCleanupImages}
+                className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-lg transition-colors text-sm font-medium"
+              >
+                🗑️ Cleanup Old Images
+              </button>
+              <button
+                onClick={fetchProducts}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors text-sm font-medium"
+              >
+                🔄 Refresh
+              </button>
+            </div>
           </div>
 
           {/* Create Product Form */}

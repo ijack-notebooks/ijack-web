@@ -43,6 +43,10 @@ export default function ProductCard({ notebook }) {
     if (!notebook.image) {
       return null;
     }
+    // If it's already a full URL (Supabase or other), return as is
+    if (notebook.image.startsWith("http://") || notebook.image.startsWith("https://")) {
+      return notebook.image;
+    }
     // If image starts with /uploads, it's a server path
     if (notebook.image.startsWith("/uploads")) {
       const baseUrl = process.env.NEXT_PUBLIC_API_URL 
@@ -50,7 +54,7 @@ export default function ProductCard({ notebook }) {
         : "https://ijack-server.onrender.com";
       return `${baseUrl}${notebook.image}`;
     }
-    // If it's already a full URL, return as is
+    // Otherwise, return as is
     return notebook.image;
   };
 

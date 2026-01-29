@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useAdminAuth } from "../../../../contexts/AdminAuthContext";
-import AdminNavbar from "../../../../components/AdminNavbar";
 import api from "../../../../lib/api";
 import { formatPrice } from "../../../../lib/currency";
 
@@ -23,22 +22,25 @@ export default function AllOrders() {
       try {
         response = await api.get("/supabase/orders");
       } catch (supabaseError) {
-        console.warn("Supabase orders failed, falling back to MongoDB:", supabaseError);
+        console.warn(
+          "Supabase orders failed, falling back to MongoDB:",
+          supabaseError,
+        );
         // Fallback to MongoDB
         response = await api.get("/admin/orders");
       }
-      
+
       let filteredOrders = response.data;
 
       if (statusFilter !== "all") {
         filteredOrders = filteredOrders.filter(
-          (order) => order.status === statusFilter
+          (order) => order.status === statusFilter,
         );
       }
 
       if (paymentFilter !== "all") {
         filteredOrders = filteredOrders.filter(
-          (order) => order.payment?.paymentStatus === paymentFilter
+          (order) => order.payment?.paymentStatus === paymentFilter,
         );
       }
 
@@ -82,7 +84,6 @@ export default function AllOrders() {
 
   return (
     <>
-      <AdminNavbar title="All Orders" />
       <main className="min-h-screen bg-gray-900 py-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           {error && (
@@ -211,8 +212,8 @@ export default function AllOrders() {
                               order.payment?.paymentStatus === "SUCCESS"
                                 ? "bg-green-900 text-green-300"
                                 : order.payment?.paymentStatus === "FAILED"
-                                ? "bg-red-900 text-red-300"
-                                : "bg-yellow-900 text-yellow-300"
+                                  ? "bg-red-900 text-red-300"
+                                  : "bg-yellow-900 text-yellow-300"
                             }`}
                           >
                             {order.payment?.paymentStatus || "PENDING"}
@@ -224,12 +225,12 @@ export default function AllOrders() {
                               order.status === "delivered"
                                 ? "bg-green-900 text-green-300"
                                 : order.status === "pending"
-                                ? "bg-yellow-900 text-yellow-300"
-                                : order.status === "processing"
-                                ? "bg-blue-900 text-blue-300"
-                                : order.status === "shipped"
-                                ? "bg-purple-900 text-purple-300"
-                                : "bg-red-900 text-red-300"
+                                  ? "bg-yellow-900 text-yellow-300"
+                                  : order.status === "processing"
+                                    ? "bg-blue-900 text-blue-300"
+                                    : order.status === "shipped"
+                                      ? "bg-purple-900 text-purple-300"
+                                      : "bg-red-900 text-red-300"
                             }`}
                           >
                             {order.status}
@@ -302,8 +303,8 @@ export default function AllOrders() {
                         selectedOrder.payment?.paymentStatus === "SUCCESS"
                           ? "bg-green-900 text-green-300"
                           : selectedOrder.payment?.paymentStatus === "FAILED"
-                          ? "bg-red-900 text-red-300"
-                          : "bg-yellow-900 text-yellow-300"
+                            ? "bg-red-900 text-red-300"
+                            : "bg-yellow-900 text-yellow-300"
                       }`}
                     >
                       {selectedOrder.payment?.paymentStatus || "PENDING"}
@@ -313,10 +314,14 @@ export default function AllOrders() {
 
                 {selectedOrder.payment && (
                   <div>
-                    <p className="text-gray-400 text-sm mb-3">Payment Details</p>
+                    <p className="text-gray-400 text-sm mb-3">
+                      Payment Details
+                    </p>
                     <div className="bg-gray-700 rounded-lg p-4 space-y-2">
                       <p className="text-white text-sm">
-                        <span className="text-gray-400">Merchant Order ID:</span>{" "}
+                        <span className="text-gray-400">
+                          Merchant Order ID:
+                        </span>{" "}
                         {selectedOrder.payment.merchantOrderId || "N/A"}
                       </p>
                       <p className="text-white text-sm">
@@ -425,4 +430,3 @@ export default function AllOrders() {
     </>
   );
 }
-

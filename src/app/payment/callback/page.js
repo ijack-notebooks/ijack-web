@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "../../../contexts/AuthContext";
 import { useCart } from "../../../contexts/CartContext";
@@ -8,7 +8,7 @@ import api from "../../../lib/api";
 import Navbar from "../../../components/Navbar";
 import { formatPrice } from "../../../lib/currency";
 
-export default function PaymentCallback() {
+function PaymentCallbackContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, loading } = useAuth();
@@ -36,10 +36,11 @@ export default function PaymentCallback() {
       // Get merchantOrderId from URL params
       // PhonePe redirects with merchantOrderId or it might be in the URL
       // Also check for orderId which PhonePe might send
-      const merchantOrderId = searchParams.get("merchantOrderId") || 
-                              searchParams.get("merchantTransactionId") || 
-                              searchParams.get("transactionId") ||
-                              searchParams.get("orderId");
+      const merchantOrderId =
+        searchParams.get("merchantOrderId") ||
+        searchParams.get("merchantTransactionId") ||
+        searchParams.get("transactionId") ||
+        searchParams.get("orderId");
 
       if (!merchantOrderId) {
         // If no merchantOrderId in URL, try to get it from sessionStorage (stored during checkout)
@@ -49,7 +50,7 @@ export default function PaymentCallback() {
           handlePaymentResponse(response);
           return;
         }
-        
+
         setError("Payment information not found");
         setChecking(false);
         return;
@@ -60,14 +61,15 @@ export default function PaymentCallback() {
       handlePaymentResponse(response);
     } catch (error) {
       console.error("Payment status check error:", error);
-      setError(error.response?.data?.message || "Failed to verify payment status");
+      setError(
+        error.response?.data?.message || "Failed to verify payment status",
+      );
       setChecking(false);
       sessionStorage.removeItem("paymentCheckAttempt");
     }
   };
 
   const handlePaymentResponse = (response) => {
-
     if (response.data.paymentStatus === "SUCCESS") {
       setOrder(response.data);
       clearCart();
@@ -86,15 +88,22 @@ export default function PaymentCallback() {
     } else {
       // Still pending, poll again (max 15 attempts to avoid infinite loop)
       const maxAttempts = 15;
-      const currentAttempt = parseInt(sessionStorage.getItem("paymentCheckAttempt") || "0");
-      
+      const currentAttempt = parseInt(
+        sessionStorage.getItem("paymentCheckAttempt") || "0",
+      );
+
       if (currentAttempt < maxAttempts) {
-        sessionStorage.setItem("paymentCheckAttempt", (currentAttempt + 1).toString());
+        sessionStorage.setItem(
+          "paymentCheckAttempt",
+          (currentAttempt + 1).toString(),
+        );
         setTimeout(() => {
           checkPaymentStatus();
         }, 3000); // Increased to 3 seconds for better reliability
       } else {
-        setError("Payment is taking longer than expected. Please check your order status in 'My Orders'.");
+        setError(
+          "Payment is taking longer than expected. Please check your order status in 'My Orders'.",
+        );
         setChecking(false);
         sessionStorage.removeItem("paymentCheckAttempt");
       }
@@ -109,7 +118,9 @@ export default function PaymentCallback() {
           <div className="text-center">
             <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500 mx-auto mb-4"></div>
             <p className="text-white text-xl">Processing your payment...</p>
-            <p className="text-gray-400 mt-2">Please wait while we verify your payment</p>
+            <p className="text-gray-400 mt-2">
+              Please wait while we verify your payment
+            </p>
           </div>
         </main>
       </>
@@ -123,7 +134,9 @@ export default function PaymentCallback() {
         <main className="min-h-screen bg-gray-900 flex items-center justify-center">
           <div className="max-w-md w-full bg-gray-800 rounded-lg p-8 border border-gray-700 text-center">
             <div className="text-6xl mb-4">❌</div>
-            <h1 className="text-2xl font-bold text-white mb-4">Payment Failed</h1>
+            <h1 className="text-2xl font-bold text-white mb-4">
+              Payment Failed
+            </h1>
             <p className="text-gray-300 mb-6">{error}</p>
             <button
               onClick={() => router.push("/cart")}
@@ -144,8 +157,12 @@ export default function PaymentCallback() {
         <main className="min-h-screen bg-gray-900 flex items-center justify-center">
           <div className="max-w-md w-full bg-gray-800 rounded-lg p-8 border border-gray-700 text-center">
             <div className="text-6xl mb-4">✅</div>
-            <h1 className="text-2xl font-bold text-white mb-4">Payment Successful!</h1>
-            <p className="text-gray-300 mb-6">Redirecting to order confirmation...</p>
+            <h1 className="text-2xl font-bold text-white mb-4">
+              Payment Successful!
+            </h1>
+            <p className="text-gray-300 mb-6">
+              Redirecting to order confirmation...
+            </p>
             <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500 mx-auto"></div>
           </div>
         </main>
@@ -154,4 +171,26 @@ export default function PaymentCallback() {
   }
 
   return null;
+}
+
+function PaymentCallbackFallback() {
+  return (
+    <>
+      <Navbar />
+      <main className="min-h-screen bg-gray-900 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500 mx-auto mb-4"></div>
+          <p className="text-white text-xl">Loading...</p>
+        </div>
+      </main>
+    </>
+  );
+}
+
+export default function PaymentCallback() {
+  return (
+    <Suspense fallback={<PaymentCallbackFallback />}>
+      <PaymentCallbackContent />
+    </Suspense>
+  );
 }

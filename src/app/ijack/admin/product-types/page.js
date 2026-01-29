@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import { useAdminAuth } from "../../../../contexts/AdminAuthContext";
-import AdminNavbar from "../../../../components/AdminNavbar";
 import api from "../../../../lib/api";
 import { formatPrice } from "../../../../lib/currency";
 
@@ -29,7 +28,7 @@ export default function ProductTypes() {
       const response = await api.get("/admin/categories");
       // Sort categories alphabetically
       const sortedCategories = (response.data || []).sort((a, b) =>
-        a.localeCompare(b)
+        a.localeCompare(b),
       );
       setCategories(sortedCategories);
     } catch (error) {
@@ -83,7 +82,7 @@ export default function ProductTypes() {
     );
   }
 
-  const handleCreateCategory = async (e) => { 
+  const handleCreateCategory = async (e) => {
     e.preventDefault();
     if (!newCategory.trim()) {
       setError("Category name cannot be empty");
@@ -109,7 +108,7 @@ export default function ProductTypes() {
   const handleDeleteAll = async () => {
     if (
       !confirm(
-        "Are you sure you want to delete ALL products? This action cannot be undone."
+        "Are you sure you want to delete ALL products? This action cannot be undone.",
       )
     ) {
       return;
@@ -135,12 +134,11 @@ export default function ProductTypes() {
 
   // Filter to only show categories that exist (either in Category model or have products)
   const displayCategories = allCategoryNames.filter(
-    (cat) => categories.includes(cat) || categoryStats[cat]
+    (cat) => categories.includes(cat) || categoryStats[cat],
   );
 
   return (
     <>
-      <AdminNavbar title="Type of Products" />
       <main className="min-h-screen bg-gray-900 py-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           {error && (
@@ -267,7 +265,7 @@ export default function ProductTypes() {
             <div className="space-y-8">
               {displayCategories.map((category) => {
                 const categoryProducts = products.filter(
-                  (p) => p.category === category
+                  (p) => p.category === category,
                 );
                 return (
                   <div
