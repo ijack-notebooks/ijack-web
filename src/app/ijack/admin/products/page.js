@@ -44,6 +44,17 @@ export default function ProductsList() {
   });
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
+  const [editingProductId, setEditingProductId] = useState(null);
+  const [editForm, setEditForm] = useState({
+    name: "",
+    description: "",
+    price: "",
+    category: "",
+    pages: "",
+    size: "",
+    stockQuantity: "",
+    inStock: true,
+  });
 
   useEffect(() => {
     if (admin) {
@@ -68,24 +79,50 @@ export default function ProductsList() {
   const fetchCategories = async () => {
     try {
       const response = await api.get("/admin/categories");
-      // Sort categories alphabetically
-      const sortedCategories = (response.data || []).sort((a, b) =>
-        a.localeCompare(b),
+      const raw = response.data || [];
+      // API returns objects { _id, name, description, hsn, gstPercentage } or legacy strings
+      const list = raw.map((c) =>
+        typeof c === "object" && c !== null
+          ? {
+              name: c.name,
+              hsn: c.hsn ?? "",
+              gstPercentage: c.gstPercentage ?? null,
+            }
+          : { name: String(c), hsn: "", gstPercentage: null }
       );
-      setCategories(sortedCategories);
+      const sorted = [...list].sort((a, b) =>
+        (a.name || "").localeCompare(b.name || "")
+      );
+      setCategories(sorted);
     } catch (error) {
       console.error("Failed to load categories:", error);
-      // If categories endpoint doesn't exist yet, get categories from products
       try {
         const productsResponse = await api.get("/notebooks");
         const uniqueCategories = [
           ...new Set(productsResponse.data.map((p) => p.category)),
         ].sort((a, b) => a.localeCompare(b));
-        setCategories(uniqueCategories);
+        setCategories(
+          uniqueCategories.map((name) => ({
+            name,
+            hsn: "",
+            gstPercentage: null,
+          }))
+        );
       } catch (err) {
         setCategories([]);
       }
     }
+  };
+
+  const categoryOptionLabel = (cat) => {
+    const name = typeof cat === "object" ? cat.name : cat;
+    if (typeof cat !== "object" || (!cat.hsn && cat.gstPercentage == null))
+      return name;
+    const hsn = cat.hsn ? `HSN: ${cat.hsn}` : "";
+    const gst =
+      cat.gstPercentage != null ? `GST: ${Number(cat.gstPercentage)}%` : "";
+    const extra = [hsn, gst].filter(Boolean).join(" • ");
+    return extra ? `${name} (${extra})` : name;
   };
 
   const handleInputChange = (e) => {
@@ -183,7 +220,7 @@ export default function ProductsList() {
             Authorization: `Bearer ${token}`,
           },
           timeout: 60000, // 60 seconds timeout for file uploads
-        },
+        }
       );
 
       setSuccess("Product created successfully!");
@@ -209,12 +246,12 @@ export default function ProductsList() {
         // Server responded with error
         setError(
           error.response.data?.message ||
-            `Failed to create product: ${error.response.status} ${error.response.statusText}`,
+            `Failed to create product: ${error.response.status} ${error.response.statusText}`
         );
       } else if (error.request) {
         // Request was made but no response received
         setError(
-          "No response from server. Please check your connection and try again.",
+          "No response from server. Please check your connection and try again."
         );
       } else {
         // Something else happened
@@ -226,7 +263,7 @@ export default function ProductsList() {
   const handleCleanupImages = async () => {
     if (
       !confirm(
-        "Are you sure you want to delete all old product images from the server folder? This will only delete local files, not Supabase images.",
+        "Are you sure you want to delete all old product images from the server folder? This will only delete local files, not Supabase images."
       )
     ) {
       return;
@@ -236,12 +273,100 @@ export default function ProductsList() {
       setError("");
       const response = await api.post("/admin/cleanup-images");
       setSuccess(
-        `Cleanup completed! Deleted ${response.data.deletedCount} old images from server folder.`,
+        `Cleanup completed! Deleted ${response.data.deletedCount} old images from server folder.`
       );
       setTimeout(() => setSuccess(""), 5000);
     } catch (error) {
       setError(error.response?.data?.message || "Failed to cleanup images");
       console.error(error);
+    }
+  };
+
+  const startEditing = (product) => {
+    setEditingProductId(product._id);
+    setEditForm({
+      name: product.name || "",
+      description: product.description || "",
+      price: product.price != null ? String(product.price) : "",
+      category: product.category || "",
+      pages: product.pages != null ? String(product.pages) : "",
+      size: product.size || "",
+      stockQuantity:
+        product.stockQuantity != null ? String(product.stockQuantity) : "",
+      inStock: product.inStock !== false,
+    });
+  };
+
+  const cancelEditing = () => {
+    setEditingProductId(null);
+    setEditForm({
+      name: "",
+      description: "",
+      price: "",
+      category: "",
+      pages: "",
+      size: "",
+      stockQuantity: "",
+      inStock: true,
+    });
+  };
+
+  const handleEditInputChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    setEditForm((prev) => ({
+      ...prev,
+      [name]: type === "checkbox" ? checked : value,
+    }));
+  };
+
+  const handleUpdateProduct = async (e) => {
+    e.preventDefault();
+    if (!editingProductId) return;
+    setError("");
+    setSuccess("");
+    const price = parseFloat(editForm.price);
+    const pages = parseInt(editForm.pages, 10);
+    const stockQuantity = parseInt(editForm.stockQuantity, 10);
+    if (
+      !editForm.name?.trim() ||
+      !editForm.description?.trim() ||
+      !editForm.category?.trim() ||
+      !editForm.size?.trim() ||
+      editForm.pages === "" ||
+      editForm.stockQuantity === ""
+    ) {
+      setError("Please fill in all required fields");
+      return;
+    }
+    if (
+      isNaN(price) ||
+      price < 0 ||
+      isNaN(pages) ||
+      pages < 1 ||
+      isNaN(stockQuantity) ||
+      stockQuantity < 0
+    ) {
+      setError("Please enter valid price, pages, and stock quantity");
+      return;
+    }
+    try {
+      await api.put(`/admin/products/${editingProductId}`, {
+        name: editForm.name.trim(),
+        description: editForm.description.trim(),
+        price,
+        category: editForm.category.trim(),
+        pages,
+        size: editForm.size.trim(),
+        stockQuantity,
+        inStock: editForm.inStock,
+      });
+      setSuccess("Product updated successfully");
+      setTimeout(() => setSuccess(""), 5000);
+      cancelEditing();
+      fetchProducts();
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to update product");
+      console.error(err);
     }
   };
 
@@ -344,8 +469,11 @@ export default function ProductsList() {
                     >
                       <option value="">Select a category</option>
                       {categories.map((cat) => (
-                        <option key={cat} value={cat}>
-                          {cat}
+                        <option
+                          key={typeof cat === "object" ? cat.name : cat}
+                          value={typeof cat === "object" ? cat.name : cat}
+                        >
+                          {categoryOptionLabel(cat)}
                         </option>
                       ))}
                     </select>
@@ -491,6 +619,167 @@ export default function ProductsList() {
             </div>
           )}
 
+          {/* Edit Product Modal */}
+          {editingProductId && (
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+              onClick={cancelEditing}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="edit-product-title"
+            >
+              <div
+                className="bg-gray-800 rounded-lg border border-gray-700 w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="p-6">
+                  <h3
+                    id="edit-product-title"
+                    className="text-xl font-bold text-white mb-4"
+                  >
+                    Edit Product
+                  </h3>
+                  <form onSubmit={handleUpdateProduct} className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                          Product Name *
+                        </label>
+                        <input
+                          type="text"
+                          name="name"
+                          value={editForm.name}
+                          onChange={handleEditInputChange}
+                          required
+                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                          Category *
+                        </label>
+                        <select
+                          name="category"
+                          value={editForm.category}
+                          onChange={handleEditInputChange}
+                          required
+                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="">Select a category</option>
+                          {categories.map((cat) => (
+                            <option
+                              key={typeof cat === "object" ? cat.name : cat}
+                              value={typeof cat === "object" ? cat.name : cat}
+                            >
+                              {categoryOptionLabel(cat)}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                          Price (₹) *
+                        </label>
+                        <input
+                          type="number"
+                          name="price"
+                          value={editForm.price}
+                          onChange={handleEditInputChange}
+                          min="0"
+                          step="0.01"
+                          required
+                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                          Pages *
+                        </label>
+                        <input
+                          type="number"
+                          name="pages"
+                          value={editForm.pages}
+                          onChange={handleEditInputChange}
+                          min="1"
+                          required
+                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                          Size *
+                        </label>
+                        <input
+                          type="text"
+                          name="size"
+                          value={editForm.size}
+                          onChange={handleEditInputChange}
+                          placeholder="e.g., 8.5 x 11 inches"
+                          required
+                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                          Stock Quantity *
+                        </label>
+                        <input
+                          type="number"
+                          name="stockQuantity"
+                          value={editForm.stockQuantity}
+                          onChange={handleEditInputChange}
+                          min="0"
+                          required
+                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Description *
+                      </label>
+                      <textarea
+                        name="description"
+                        value={editForm.description}
+                        onChange={handleEditInputChange}
+                        rows="3"
+                        required
+                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div className="flex items-center">
+                      <input
+                        type="checkbox"
+                        name="inStock"
+                        checked={editForm.inStock}
+                        onChange={handleEditInputChange}
+                        className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500"
+                      />
+                      <label className="ml-2 text-sm text-gray-300">
+                        In Stock
+                      </label>
+                    </div>
+                    <div className="flex gap-3 pt-2">
+                      <button
+                        type="submit"
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
+                      >
+                        Save changes
+                      </button>
+                      <button
+                        type="button"
+                        onClick={cancelEditing}
+                        className="bg-gray-600 hover:bg-gray-500 text-white px-4 py-2 rounded-lg transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full">
@@ -598,12 +887,20 @@ export default function ProductsList() {
                             </span>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm">
-                            <button
-                              onClick={() => handleDelete(product._id)}
-                              className="text-red-400 hover:text-red-300"
-                            >
-                              Delete
-                            </button>
+                            <div className="flex gap-3">
+                              <button
+                                onClick={() => startEditing(product)}
+                                className="text-amber-400 hover:text-amber-300"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => handleDelete(product._id)}
+                                className="text-red-400 hover:text-red-300"
+                              >
+                                Delete
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );

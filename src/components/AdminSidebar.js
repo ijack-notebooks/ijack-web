@@ -19,6 +19,11 @@ export default function AdminSidebar({ isOpen, toggleSidebar }) {
       icon: "📦",
     },
     {
+      name: "Shipments",
+      path: "/ijack/admin/shipments",
+      icon: "🚚",
+    },
+    {
       name: "Products List",
       path: "/ijack/admin/products",
       icon: "📚",

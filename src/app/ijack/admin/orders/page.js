@@ -1,18 +1,24 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useAdminAuth } from "../../../../contexts/AdminAuthContext";
 import api from "../../../../lib/api";
 import { formatPrice } from "../../../../lib/currency";
 
 export default function AllOrders() {
   const { admin } = useAdminAuth();
+  const router = useRouter();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [statusFilter, setStatusFilter] = useState("all");
   const [paymentFilter, setPaymentFilter] = useState("all");
+  const [shiprocketConfig, setShiprocketConfig] = useState(null);
+  const [shiprocketLoading, setShiprocketLoading] = useState(false);
+  const [shiprocketError, setShiprocketError] = useState("");
 
   const fetchOrders = useCallback(async () => {
     try {
@@ -71,6 +77,27 @@ export default function AllOrders() {
     } catch (error) {
       alert("Failed to update order status");
       console.error(error);
+    }
+  };
+
+  useEffect(() => {
+    if (!admin) return;
+    api.get("/admin/shiprocket/config").then((r) => setShiprocketConfig(r.data)).catch(() => setShiprocketConfig({ configured: false }));
+  }, [admin]);
+
+  const shiprocketCreateOrder = async () => {
+    if (!selectedOrder) return;
+    setShiprocketLoading(true);
+    setShiprocketError("");
+    try {
+      const res = await api.post("/admin/shiprocket/create-order", { orderId: selectedOrder._id });
+      setSelectedOrder(res.data.order);
+      await fetchOrders();
+      router.push(`/ijack/admin/shipments?orderId=${selectedOrder._id}`);
+    } catch (err) {
+      setShiprocketError(err.response?.data?.message || err.message || "Failed to create shipment");
+    } finally {
+      setShiprocketLoading(false);
     }
   };
 
@@ -263,7 +290,10 @@ export default function AllOrders() {
               <div className="p-6 border-b border-gray-700 flex justify-between items-center">
                 <h2 className="text-2xl font-bold text-white">Order Details</h2>
                 <button
-                  onClick={() => setSelectedOrder(null)}
+                  onClick={() => {
+                    setSelectedOrder(null);
+                    setShiprocketError("");
+                  }}
                   className="text-gray-400 hover:text-white"
                 >
                   ✕
@@ -421,6 +451,63 @@ export default function AllOrders() {
                       {selectedOrder.address?.country}
                     </p>
                   </div>
+                </div>
+
+                {/* Shiprocket Delivery */}
+                <div>
+                  <p className="text-gray-400 text-sm mb-2 flex items-center gap-2">
+                    Shiprocket Delivery
+                    {shiprocketConfig?.testMode && (
+                      <span className="px-2 py-0.5 text-xs font-semibold rounded bg-amber-600 text-amber-100">
+                        Test mode
+                      </span>
+                    )}
+                  </p>
+                  {!shiprocketConfig?.configured ? (
+                    <div className="bg-amber-900/30 border border-amber-700 rounded-lg p-4 text-amber-200 text-sm">
+                      Shiprocket is not configured. Add SHIPROCKET_EMAIL and SHIPROCKET_PASSWORD to the server .env, or set SHIPROCKET_TEST_MODE=true for test mode. See SHIPROCKET_INTEGRATION.md.
+                    </div>
+                  ) : (
+                    <div className="bg-gray-700 rounded-lg p-4 space-y-3">
+                      {shiprocketError && (
+                        <p className="text-red-400 text-sm">{shiprocketError}</p>
+                      )}
+                      {selectedOrder.shiprocket?.orderId ? (
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                          <div className="flex items-center gap-2">
+                            <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-900 text-green-300">
+                              Shipment created
+                            </span>
+                            <span className="text-sm text-gray-400">
+                              SR Order: {selectedOrder.shiprocket.orderId}
+                            </span>
+                          </div>
+                          <Link
+                            href={`/ijack/admin/shipments?orderId=${selectedOrder._id}`}
+                            className="inline-flex items-center gap-1 text-blue-400 hover:text-blue-300 text-sm font-medium"
+                          >
+                            View Shipment
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                            </svg>
+                          </Link>
+                        </div>
+                      ) : (
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            onClick={shiprocketCreateOrder}
+                            disabled={shiprocketLoading}
+                            className="bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white px-3 py-2 rounded-lg text-sm font-medium"
+                          >
+                            {shiprocketLoading ? "..." : "Create Shipment"}
+                          </button>
+                          <p className="text-xs text-gray-400 self-center">
+                            You will be taken to the Shipments page to assign AWB, get label, and track.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
