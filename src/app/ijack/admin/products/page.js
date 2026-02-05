@@ -267,28 +267,6 @@ export default function ProductsList() {
     }
   };
 
-  const handleCleanupImages = async () => {
-    if (
-      !confirm(
-        "Are you sure you want to delete all old product images from the server folder? This will only delete local files, not Supabase images."
-      )
-    ) {
-      return;
-    }
-
-    try {
-      setError("");
-      const response = await api.post("/admin/cleanup-images");
-      setSuccess(
-        `Cleanup completed! Deleted ${response.data.deletedCount} old images from server folder.`
-      );
-      setTimeout(() => setSuccess(""), 5000);
-    } catch (error) {
-      setError(error.response?.data?.message || "Failed to cleanup images");
-      console.error(error);
-    }
-  };
-
   const startEditing = (product) => {
     setEditingProductId(product._id);
     setEditForm({
@@ -479,12 +457,6 @@ export default function ProductsList() {
               {showCreateForm ? "✕ Cancel" : "+ New Product"}
             </button>
             <div className="flex gap-3">
-              <button
-                onClick={handleCleanupImages}
-                className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-lg transition-colors text-sm font-medium"
-              >
-                🗑️ Cleanup Old Images
-              </button>
               <button
                 onClick={fetchProducts}
                 className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors text-sm font-medium"
