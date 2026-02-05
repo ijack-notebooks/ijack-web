@@ -89,9 +89,9 @@ export default function TermsAndConditions() {
                 or product information, or suspected fraud.
               </p>
               <p className="text-gray-300 leading-relaxed">
-                <strong className="text-white">5.2 Payment:</strong> Payment must be made at the time of order placement. We accept 
-                various payment methods as displayed on our website. You agree to provide current, complete, and accurate purchase and 
-                account information for all purchases.
+                <strong className="text-white">5.2 Payment:</strong> All orders are prepaid. Payment must be made at the time of 
+                order placement. We do not offer Cash on Delivery (COD). We accept various payment methods as displayed on our 
+                website. You agree to provide current, complete, and accurate purchase and account information for all purchases.
               </p>
               <p className="text-gray-300 leading-relaxed">
                 <strong className="text-white">5.3 Order Confirmation:</strong> After placing an order, you will receive an order 
@@ -121,8 +121,9 @@ export default function TermsAndConditions() {
           <section>
             <h2 className="text-2xl font-semibold mb-4 text-blue-400">7. Returns and Refunds</h2>
             <p className="text-gray-300 leading-relaxed">
-              Please refer to our <Link href="/refund" className="text-blue-400 hover:text-blue-300 underline">Refund/Cancellation Policy</Link> for 
-              detailed information about returns, exchanges, and refunds.
+              We do not accept returns. Refunds are only provided for damaged, defective, or lost-in-transit products 
+              as described in our <Link href="/refund" className="text-blue-400 hover:text-blue-300 underline">Return & Refund Policy</Link>. 
+              Please refer to that policy for full details.
             </p>
           </section>
 
@@ -210,26 +211,21 @@ export default function TermsAndConditions() {
             </div>
           </section>
 
-          <div className="flex gap-4 justify-center pt-4 border-t border-gray-700">
-            <Link
-              href="/contact"
-              className="text-blue-400 hover:text-blue-300 underline"
-            >
-              Contact Us
+          <div className="flex flex-wrap gap-4 justify-center pt-4 border-t border-gray-700">
+            <Link href="/shipping" className="text-blue-400 hover:text-blue-300 underline text-sm">
+              Shipping Policy
             </Link>
             <span className="text-gray-600">|</span>
-            <Link
-              href="/privacy"
-              className="text-blue-400 hover:text-blue-300 underline"
-            >
+            <Link href="/refund" className="text-blue-400 hover:text-blue-300 underline text-sm">
+              Return & Refund Policy
+            </Link>
+            <span className="text-gray-600">|</span>
+            <Link href="/privacy" className="text-blue-400 hover:text-blue-300 underline text-sm">
               Privacy Policy
             </Link>
             <span className="text-gray-600">|</span>
-            <Link
-              href="/refund"
-              className="text-blue-400 hover:text-blue-300 underline"
-            >
-              Refund Policy
+            <Link href="/contact" className="text-blue-400 hover:text-blue-300 underline text-sm">
+              Contact Us
             </Link>
           </div>
         </div>

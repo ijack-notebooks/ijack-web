@@ -69,7 +69,7 @@ export default function ContactUs() {
             <div className="space-y-3 text-gray-300">
               <p>• <strong className="text-white">Product Inquiries:</strong> Questions about our notebooks and products</p>
               <p>• <strong className="text-white">Order Support:</strong> Help with placing or tracking orders</p>
-              <p>• <strong className="text-white">Customer Service:</strong> Returns, refunds, or exchanges</p>
+              <p>• <strong className="text-white">Refund Queries:</strong> Refund-related queries (damaged, defective, or lost-in-transit)</p>
               <p>• <strong className="text-white">Bulk Orders:</strong> Special pricing for bulk purchases</p>
               <p>• <strong className="text-white">Feedback:</strong> Share your thoughts and suggestions</p>
             </div>
@@ -82,26 +82,21 @@ export default function ContactUs() {
             </p>
           </section>
 
-          <div className="flex gap-4 justify-center pt-4">
-            <Link
-              href="/privacy"
-              className="text-blue-400 hover:text-blue-300 underline"
-            >
-              Privacy Policy
+          <div className="flex flex-wrap gap-4 justify-center pt-4">
+            <Link href="/shipping" className="text-blue-400 hover:text-blue-300 underline text-sm">
+              Shipping Policy
             </Link>
             <span className="text-gray-600">|</span>
-            <Link
-              href="/terms"
-              className="text-blue-400 hover:text-blue-300 underline"
-            >
+            <Link href="/refund" className="text-blue-400 hover:text-blue-300 underline text-sm">
+              Return & Refund Policy
+            </Link>
+            <span className="text-gray-600">|</span>
+            <Link href="/terms" className="text-blue-400 hover:text-blue-300 underline text-sm">
               Terms & Conditions
             </Link>
             <span className="text-gray-600">|</span>
-            <Link
-              href="/refund"
-              className="text-blue-400 hover:text-blue-300 underline"
-            >
-              Refund Policy
+            <Link href="/privacy" className="text-blue-400 hover:text-blue-300 underline text-sm">
+              Privacy Policy
             </Link>
           </div>
         </div>

@@ -40,6 +40,7 @@ export default function ProductsList() {
     pages: "",
     size: "",
     stockQuantity: "",
+    weight: "",
     inStock: true,
   });
   const [imageFile, setImageFile] = useState(null);
@@ -53,6 +54,7 @@ export default function ProductsList() {
     pages: "",
     size: "",
     stockQuantity: "",
+    weight: "",
     inStock: true,
   });
 
@@ -194,6 +196,8 @@ export default function ProductsList() {
       formDataToSend.append("pages", pages.toString());
       formDataToSend.append("size", formData.size.trim());
       formDataToSend.append("stockQuantity", stockQuantity.toString());
+      const weight = formData.weight !== "" && formData.weight != null ? Math.max(0, Number(formData.weight)) : 0;
+      formDataToSend.append("weight", weight.toString());
       formDataToSend.append("inStock", formData.inStock ? "true" : "false");
 
       if (imageFile) {
@@ -233,6 +237,7 @@ export default function ProductsList() {
         pages: "",
         size: "",
         stockQuantity: "",
+        weight: "",
         inStock: true,
       });
       setImageFile(null);
@@ -293,6 +298,7 @@ export default function ProductsList() {
       size: product.size || "",
       stockQuantity:
         product.stockQuantity != null ? String(product.stockQuantity) : "",
+      weight: product.weight != null ? String(product.weight) : "",
       inStock: product.inStock !== false,
     });
   };
@@ -307,6 +313,7 @@ export default function ProductsList() {
       pages: "",
       size: "",
       stockQuantity: "",
+      weight: "",
       inStock: true,
     });
   };
@@ -327,6 +334,7 @@ export default function ProductsList() {
     const price = parseFloat(editForm.price);
     const pages = parseInt(editForm.pages, 10);
     const stockQuantity = parseInt(editForm.stockQuantity, 10);
+    const weight = editForm.weight !== "" && editForm.weight != null ? Math.max(0, Number(editForm.weight)) : 0;
     if (
       !editForm.name?.trim() ||
       !editForm.description?.trim() ||
@@ -358,6 +366,7 @@ export default function ProductsList() {
         pages,
         size: editForm.size.trim(),
         stockQuantity,
+        weight,
         inStock: editForm.inStock,
       });
       setSuccess("Product updated successfully");
@@ -541,6 +550,24 @@ export default function ProductsList() {
                       className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Weight (grams per piece)
+                    </label>
+                    <input
+                      type="number"
+                      name="weight"
+                      value={formData.weight}
+                      onChange={handleInputChange}
+                      min="0"
+                      step="1"
+                      placeholder="e.g., 250"
+                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">
+                      Optional. Weight of one unit in grams.
+                    </p>
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
@@ -605,6 +632,7 @@ export default function ProductsList() {
                         pages: "",
                         size: "",
                         stockQuantity: "",
+                        weight: "",
                         inStock: true,
                       });
                       setImageFile(null);
@@ -730,6 +758,21 @@ export default function ProductsList() {
                           onChange={handleEditInputChange}
                           min="0"
                           required
+                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                          Weight (grams per piece)
+                        </label>
+                        <input
+                          type="number"
+                          name="weight"
+                          value={editForm.weight}
+                          onChange={handleEditInputChange}
+                          min="0"
+                          step="1"
+                          placeholder="e.g., 250"
                           className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
                       </div>

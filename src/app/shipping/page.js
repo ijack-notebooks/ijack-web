@@ -29,6 +29,10 @@ export default function ShippingPolicy() {
               outlines our shipping methods, delivery times, costs, and procedures. Please read this policy carefully before 
               placing an order.
             </p>
+            <p className="text-gray-300 leading-relaxed mt-3">
+              <strong className="text-white">All orders are prepaid only.</strong> Payment must be completed online at the time 
+              of order. We do not offer Cash on Delivery (COD) or any pay-on-delivery option.
+            </p>
           </section>
 
           <section>
@@ -69,13 +73,9 @@ export default function ShippingPolicy() {
                 </p>
               </div>
 
-              <div>
-                <h3 className="text-xl font-semibold mb-2 text-white">3.3 Cash on Delivery (COD)</h3>
-                <p className="text-gray-300 leading-relaxed">
-                  Cash on Delivery is available for orders above ₹500. COD charges may apply. Please note that COD orders 
-                  may take 1-2 additional business days for processing.
-                </p>
-              </div>
+              <p className="text-gray-300 leading-relaxed text-sm italic">
+                We do not offer Cash on Delivery (COD). All orders are prepaid; payment is required online at the time of order.
+              </p>
             </div>
           </section>
 
@@ -83,16 +83,12 @@ export default function ShippingPolicy() {
             <h2 className="text-2xl font-semibold mb-4 text-blue-400">4. Shipping Costs</h2>
             <div className="space-y-3">
               <p className="text-gray-300 leading-relaxed">
-                <strong className="text-white">4.1 Free Shipping:</strong> We offer free standard shipping on orders above 
-                ₹1,000. For orders below ₹1,000, shipping charges will be calculated at checkout based on your delivery location.
-              </p>
-              <p className="text-gray-300 leading-relaxed">
-                <strong className="text-white">4.2 Shipping Charges:</strong> Shipping charges vary based on:
+                We do not offer free shipping. Shipping charges apply to all orders and vary based on:
               </p>
               <ul className="list-disc list-inside ml-4 space-y-1 text-gray-300">
                 <li>Delivery location (distance from our warehouse)</li>
                 <li>Order weight and dimensions</li>
-                <li>Selected shipping method</li>
+                <li>Selected shipping method (standard or express)</li>
               </ul>
               <p className="text-gray-300 leading-relaxed mt-2">
                 Exact shipping charges will be displayed at checkout before you complete your purchase.
@@ -299,33 +295,21 @@ export default function ShippingPolicy() {
             </p>
           </section>
 
-          <div className="flex gap-4 justify-center pt-4 border-t border-gray-700">
-            <Link
-              href="/contact"
-              className="text-blue-400 hover:text-blue-300 underline"
-            >
-              Contact Us
+          <div className="flex flex-wrap gap-4 justify-center pt-4 border-t border-gray-700">
+            <Link href="/refund" className="text-blue-400 hover:text-blue-300 underline text-sm">
+              Return & Refund Policy
             </Link>
             <span className="text-gray-600">|</span>
-            <Link
-              href="/terms"
-              className="text-blue-400 hover:text-blue-300 underline"
-            >
+            <Link href="/terms" className="text-blue-400 hover:text-blue-300 underline text-sm">
               Terms & Conditions
             </Link>
             <span className="text-gray-600">|</span>
-            <Link
-              href="/refund"
-              className="text-blue-400 hover:text-blue-300 underline"
-            >
-              Refund Policy
+            <Link href="/privacy" className="text-blue-400 hover:text-blue-300 underline text-sm">
+              Privacy Policy
             </Link>
             <span className="text-gray-600">|</span>
-            <Link
-              href="/privacy"
-              className="text-blue-400 hover:text-blue-300 underline"
-            >
-              Privacy Policy
+            <Link href="/contact" className="text-blue-400 hover:text-blue-300 underline text-sm">
+              Contact Us
             </Link>
           </div>
         </div>

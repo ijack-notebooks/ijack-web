@@ -1,9 +1,44 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import Navbar from "../components/Navbar";
+import { useAuth } from "../contexts/AuthContext";
 
 export default function Home() {
+  const { user, loading } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (loading) return;
+    if (user) {
+      router.replace("/notebooks");
+    }
+  }, [user, loading, router]);
+
+  if (loading) {
+    return (
+      <>
+        <Navbar />
+        <main className="min-h-screen bg-gray-900 flex items-center justify-center">
+          <div className="text-white text-xl">Loading...</div>
+        </main>
+      </>
+    );
+  }
+
+  if (user) {
+    return (
+      <>
+        <Navbar />
+        <main className="min-h-screen bg-gray-900 flex items-center justify-center">
+          <div className="text-gray-400 text-lg">Redirecting to homepage...</div>
+        </main>
+      </>
+    );
+  }
+
   return (
     <>
       <Navbar />

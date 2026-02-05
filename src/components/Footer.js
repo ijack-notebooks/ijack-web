@@ -39,8 +39,13 @@ export default function Footer() {
             <h4 className="text-white font-semibold mb-4">Legal</h4>
             <ul className="space-y-2">
               <li>
-                <Link href="/privacy" className="text-gray-400 hover:text-white transition-colors text-sm">
-                  Privacy Policy
+                <Link href="/shipping" className="text-gray-400 hover:text-white transition-colors text-sm">
+                  Shipping Policy
+                </Link>
+              </li>
+              <li>
+                <Link href="/refund" className="text-gray-400 hover:text-white transition-colors text-sm">
+                  Return & Refund Policy
                 </Link>
               </li>
               <li>
@@ -49,13 +54,8 @@ export default function Footer() {
                 </Link>
               </li>
               <li>
-                <Link href="/refund" className="text-gray-400 hover:text-white transition-colors text-sm">
-                  Refund Policy
-                </Link>
-              </li>
-              <li>
-                <Link href="/shipping" className="text-gray-400 hover:text-white transition-colors text-sm">
-                  Shipping Policy
+                <Link href="/privacy" className="text-gray-400 hover:text-white transition-colors text-sm">
+                  Privacy Policy
                 </Link>
               </li>
             </ul>

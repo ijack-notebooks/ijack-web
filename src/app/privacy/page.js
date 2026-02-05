@@ -168,19 +168,21 @@ export default function PrivacyPolicy() {
             </div>
           </section>
 
-          <div className="flex gap-4 justify-center pt-4 border-t border-gray-700">
-            <Link
-              href="/contact"
-              className="text-blue-400 hover:text-blue-300 underline"
-            >
-              Contact Us
+          <div className="flex flex-wrap gap-4 justify-center pt-4 border-t border-gray-700">
+            <Link href="/shipping" className="text-blue-400 hover:text-blue-300 underline text-sm">
+              Shipping Policy
             </Link>
             <span className="text-gray-600">|</span>
-            <Link
-              href="/terms"
-              className="text-blue-400 hover:text-blue-300 underline"
-            >
+            <Link href="/refund" className="text-blue-400 hover:text-blue-300 underline text-sm">
+              Return & Refund Policy
+            </Link>
+            <span className="text-gray-600">|</span>
+            <Link href="/terms" className="text-blue-400 hover:text-blue-300 underline text-sm">
               Terms & Conditions
+            </Link>
+            <span className="text-gray-600">|</span>
+            <Link href="/contact" className="text-blue-400 hover:text-blue-300 underline text-sm">
+              Contact Us
             </Link>
           </div>
         </div>

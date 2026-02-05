@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useAuth } from "../../contexts/AuthContext";
 import { useCart } from "../../contexts/CartContext";
 import api from "../../lib/api";
@@ -269,6 +270,13 @@ export default function Checkout() {
                   </div>
                 </div>
 
+                <p className="text-gray-400 text-xs">
+                  By placing your order you agree to our{" "}
+                  <Link href="/shipping" className="text-blue-400 hover:underline">Shipping Policy</Link>,{" "}
+                  <Link href="/refund" className="text-blue-400 hover:underline">Return & Refund Policy</Link>,{" "}
+                  <Link href="/terms" className="text-blue-400 hover:underline">Terms & Conditions</Link>, and{" "}
+                  <Link href="/privacy" className="text-blue-400 hover:underline">Privacy Policy</Link>.
+                </p>
                 <button
                   type="submit"
                   disabled={loading}

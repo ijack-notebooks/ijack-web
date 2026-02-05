@@ -20,19 +20,24 @@ const api = axios.create({
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    // Don't log 401 errors for /auth/me endpoint - these are expected when tokens are invalid/expired
-    const isAuthCheck = error.config?.url === "/auth/me" && error.response?.status === 401;
-    
+    const status = error.response?.status;
+    const url = error.config?.url ?? "";
+    const isAdminRoute = url.startsWith("/admin") || url.startsWith("/supabase");
+    const isAuthCheck = url.includes("/auth/me") && status === 401;
+
+    // On 401 for admin routes: clear token so next check sends to login; notify context
+    if (status === 401 && typeof window !== "undefined" && isAdminRoute) {
+      localStorage.removeItem("adminToken");
+      window.dispatchEvent(new CustomEvent("admin-unauthorized"));
+    }
+
     if (error.response) {
-      // Server responded with error status
       if (!isAuthCheck) {
-        console.error("API Error:", error.response.status, error.response.data);
+        console.error("API Error:", status, error.response?.data);
       }
     } else if (error.request) {
-      // Request was made but no response received
       console.error("API Error: No response received", error.request);
     } else {
-      // Something else happened
       console.error("API Error:", error.message);
     }
     return Promise.reject(error);

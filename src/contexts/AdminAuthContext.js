@@ -15,13 +15,26 @@ export function AdminAuthProvider({ children }) {
     checkAdminAuth();
   }, []);
 
+  // When any admin API returns 401 (e.g. token expired), api interceptor clears token and dispatches this event
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      localStorage.removeItem("adminToken");
+      setAdmin(null);
+    };
+    window.addEventListener("admin-unauthorized", handleUnauthorized);
+    return () => window.removeEventListener("admin-unauthorized", handleUnauthorized);
+  }, []);
+
   const checkAdminAuth = async () => {
     try {
       const token = localStorage.getItem("adminToken");
-      if (token) {
-        const response = await api.get("/admin/auth/me");
-        setAdmin(response.data.admin);
+      if (!token) {
+        setAdmin(null);
+        setLoading(false);
+        return;
       }
+      const response = await api.get("/admin/auth/me");
+      setAdmin(response.data.admin);
     } catch (error) {
       localStorage.removeItem("adminToken");
       setAdmin(null);
