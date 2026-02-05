@@ -273,7 +273,8 @@ export default function Checkout() {
                 <p className="text-gray-400 text-xs">
                   By placing your order you agree to our{" "}
                   <Link href="/shipping" className="text-blue-400 hover:underline">Shipping Policy</Link>,{" "}
-                  <Link href="/refund" className="text-blue-400 hover:underline">Return & Refund Policy</Link>,{" "}
+                  <Link href="/return" className="text-blue-400 hover:underline">Return Policy</Link>,{" "}
+                  <Link href="/refund" className="text-blue-400 hover:underline">Refund Policy</Link>,{" "}
                   <Link href="/terms" className="text-blue-400 hover:underline">Terms & Conditions</Link>, and{" "}
                   <Link href="/privacy" className="text-blue-400 hover:underline">Privacy Policy</Link>.
                 </p>

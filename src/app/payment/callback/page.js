@@ -147,7 +147,9 @@ function PaymentCallbackContent() {
             <p className="text-gray-400 text-xs mt-6">
               <a href="/shipping" className="text-blue-400 hover:underline">Shipping</a>
               {" · "}
-              <a href="/refund" className="text-blue-400 hover:underline">Return & Refund</a>
+              <a href="/return" className="text-blue-400 hover:underline">Return</a>
+              {" · "}
+              <a href="/refund" className="text-blue-400 hover:underline">Refund</a>
               {" · "}
               <a href="/terms" className="text-blue-400 hover:underline">Terms</a>
               {" · "}

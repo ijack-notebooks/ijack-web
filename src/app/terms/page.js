@@ -121,9 +121,9 @@ export default function TermsAndConditions() {
           <section>
             <h2 className="text-2xl font-semibold mb-4 text-blue-400">7. Returns and Refunds</h2>
             <p className="text-gray-300 leading-relaxed">
-              We do not accept returns. Refunds are only provided for damaged, defective, or lost-in-transit products 
-              as described in our <Link href="/refund" className="text-blue-400 hover:text-blue-300 underline">Return & Refund Policy</Link>. 
-              Please refer to that policy for full details.
+              We do not offer returns on any product. Please refer to our <Link href="/return" className="text-blue-400 hover:text-blue-300 underline">Return Policy</Link> for 
+              details. Refunds are only provided for damaged, defective, or lost-in-transit products as described in 
+              our <Link href="/refund" className="text-blue-400 hover:text-blue-300 underline">Refund Policy</Link>.
             </p>
           </section>
 
@@ -216,8 +216,12 @@ export default function TermsAndConditions() {
               Shipping Policy
             </Link>
             <span className="text-gray-600">|</span>
+            <Link href="/return" className="text-blue-400 hover:text-blue-300 underline text-sm">
+              Return Policy
+            </Link>
+            <span className="text-gray-600">|</span>
             <Link href="/refund" className="text-blue-400 hover:text-blue-300 underline text-sm">
-              Return & Refund Policy
+              Refund Policy
             </Link>
             <span className="text-gray-600">|</span>
             <Link href="/privacy" className="text-blue-400 hover:text-blue-300 underline text-sm">

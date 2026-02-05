@@ -87,8 +87,12 @@ export default function ContactUs() {
               Shipping Policy
             </Link>
             <span className="text-gray-600">|</span>
+            <Link href="/return" className="text-blue-400 hover:text-blue-300 underline text-sm">
+              Return Policy
+            </Link>
+            <span className="text-gray-600">|</span>
             <Link href="/refund" className="text-blue-400 hover:text-blue-300 underline text-sm">
-              Return & Refund Policy
+              Refund Policy
             </Link>
             <span className="text-gray-600">|</span>
             <Link href="/terms" className="text-blue-400 hover:text-blue-300 underline text-sm">
