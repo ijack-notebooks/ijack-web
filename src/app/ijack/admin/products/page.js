@@ -57,6 +57,8 @@ export default function ProductsList() {
     weight: "",
     inStock: true,
   });
+  const [editImageFile, setEditImageFile] = useState(null);
+  const [editImagePreview, setEditImagePreview] = useState(null);
 
   useEffect(() => {
     if (admin) {
@@ -301,6 +303,8 @@ export default function ProductsList() {
       weight: product.weight != null ? String(product.weight) : "",
       inStock: product.inStock !== false,
     });
+    setEditImageFile(null);
+    setEditImagePreview(getImageUrl(product.image) || null);
   };
 
   const cancelEditing = () => {
@@ -316,6 +320,18 @@ export default function ProductsList() {
       weight: "",
       inStock: true,
     });
+    setEditImageFile(null);
+    setEditImagePreview(null);
+  };
+
+  const handleEditImageChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setEditImageFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => setEditImagePreview(reader.result);
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleEditInputChange = (e) => {
@@ -358,17 +374,51 @@ export default function ProductsList() {
       return;
     }
     try {
-      await api.put(`/admin/products/${editingProductId}`, {
-        name: editForm.name.trim(),
-        description: editForm.description.trim(),
-        price,
-        category: editForm.category.trim(),
-        pages,
-        size: editForm.size.trim(),
-        stockQuantity,
-        weight,
-        inStock: editForm.inStock,
-      });
+      if (editImageFile) {
+        const formDataToSend = new FormData();
+        formDataToSend.append("name", editForm.name.trim());
+        formDataToSend.append("description", editForm.description.trim());
+        formDataToSend.append("price", price.toString());
+        formDataToSend.append("category", editForm.category.trim());
+        formDataToSend.append("pages", pages.toString());
+        formDataToSend.append("size", editForm.size.trim());
+        formDataToSend.append("stockQuantity", stockQuantity.toString());
+        formDataToSend.append("weight", weight.toString());
+        formDataToSend.append("inStock", editForm.inStock ? "true" : "false");
+        formDataToSend.append("image", editImageFile);
+
+        const token = localStorage.getItem("adminToken");
+        if (!token) {
+          setError("You are not authenticated. Please log in again.");
+          return;
+        }
+        const API_URL =
+          process.env.NEXT_PUBLIC_API_URL ||
+          "https://ijack-server.onrender.com/api";
+        await axios.patch(
+          `${API_URL}/admin/products/${editingProductId}`,
+          formDataToSend,
+          {
+            headers: {
+              "Content-Type": "multipart/form-data",
+              Authorization: `Bearer ${token}`,
+            },
+            timeout: 60000,
+          }
+        );
+      } else {
+        await api.put(`/admin/products/${editingProductId}`, {
+          name: editForm.name.trim(),
+          description: editForm.description.trim(),
+          price,
+          category: editForm.category.trim(),
+          pages,
+          size: editForm.size.trim(),
+          stockQuantity,
+          weight,
+          inStock: editForm.inStock,
+        });
+      }
       setSuccess("Product updated successfully");
       setTimeout(() => setSuccess(""), 5000);
       cancelEditing();
@@ -789,6 +839,30 @@ export default function ProductsList() {
                         required
                         className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Product Image
+                      </label>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleEditImageChange}
+                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white text-sm file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700"
+                      />
+                      <p className="text-xs text-gray-400 mt-1">
+                        Optional. Leave empty to keep the current image.
+                      </p>
+                      {editImagePreview && (
+                        <div className="mt-3">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={editImagePreview}
+                            alt="Preview"
+                            className="max-w-xs max-h-40 rounded-lg border border-gray-600 object-contain"
+                          />
+                        </div>
+                      )}
                     </div>
                     <div className="flex items-center">
                       <input
