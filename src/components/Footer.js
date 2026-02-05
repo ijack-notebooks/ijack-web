@@ -8,7 +8,7 @@ export default function Footer() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
           <div>
-            <h3 className="text-xl font-bold text-white mb-4">Ijack Paper Products</h3>
+            <h3 className="text-xl font-bold text-white mb-4">I Jack Paper Products</h3>
             <p className="text-gray-400 text-sm">
               Premium quality notebooks and paper products for all your needs.
             </p>
@@ -82,7 +82,7 @@ export default function Footer() {
 
         <div className="border-t border-gray-700 mt-8 pt-6 text-center">
           <p className="text-gray-400 text-sm">
-            © {new Date().getFullYear()} Ijack Paper Products. All rights reserved.
+            © {new Date().getFullYear()} I Jack Paper Products. All rights reserved.
           </p>
         </div>
       </div>
