@@ -5,14 +5,41 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "../../contexts/AuthContext";
 import Navbar from "../../components/Navbar";
+import GoogleSignInButton from "../../components/GoogleSignInButton";
+import api from "../../lib/api";
 
 export default function Login() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const { user, loading: authLoading, login } = useAuth();
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const { user, loading: authLoading, login, checkAuth } = useAuth();
   const router = useRouter();
+
+  const handleGoogleSuccess = async (idToken) => {
+    setGoogleLoading(true);
+    setError("");
+    try {
+      const response = await api.post("/auth/google", { id_token: idToken });
+      if (response.data?.token) {
+        localStorage.setItem("token", response.data.token);
+        await checkAuth();
+        router.push("/notebooks");
+      } else {
+        setError("Sign-in failed. Please try again.");
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || err.message || "Google sign-in failed");
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
+
+  const handleGoogleError = (message) => {
+    setError(message || "Google sign-in failed");
+    setGoogleLoading(false);
+  };
 
   useEffect(() => {
     if (authLoading) return;
@@ -131,6 +158,24 @@ export default function Login() {
               >
                 {loading ? "Signing in..." : "Sign in"}
               </button>
+            </div>
+
+            <div className="relative my-4">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-600" />
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-2 bg-gray-800 text-gray-400">Or continue with</span>
+              </div>
+            </div>
+
+            <div>
+              <GoogleSignInButton
+                onSuccess={handleGoogleSuccess}
+                onError={handleGoogleError}
+                disabled={googleLoading}
+                loading={googleLoading}
+              />
             </div>
           </form>
         </div>
