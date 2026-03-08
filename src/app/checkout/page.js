@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "../../contexts/AuthContext";
@@ -9,10 +9,14 @@ import api from "../../lib/api";
 import Navbar from "../../components/Navbar";
 import { formatPrice } from "../../lib/currency";
 
+// Shipping: Rs 26 per 500 grams
+const SHIPPING_PER_500G = 26;
+
 export default function Checkout() {
   const { cart, getTotalPrice, clearCart } = useCart();
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
+  const [categories, setCategories] = useState([]);
 
   const [formData, setFormData] = useState({
     name: user?.username || "",
@@ -42,6 +46,11 @@ export default function Checkout() {
     }
   }, [user, authLoading, cart.length, router]);
 
+  // Fetch category GST rates for checkout
+  useEffect(() => {
+    api.get("/notebooks/categories").then((res) => setCategories(res.data || [])).catch(() => setCategories([]));
+  }, []);
+
   // Update form data when user changes
   useEffect(() => {
     if (user && (!formData.name || !formData.email)) {
@@ -53,6 +62,34 @@ export default function Checkout() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
+
+  // GST % by category name
+  const gstByCategory = useMemo(() => {
+    return Object.fromEntries(
+      (categories || []).map((c) => [c.name, Number(c.gstPercentage) || 0])
+    );
+  }, [categories]);
+
+  // Order totals: subtotal, shipping (Rs 26 per 500g), GST by category, total
+  const { subtotal, shippingCharge, gstAmount, total } = useMemo(() => {
+    const sub = getTotalPrice();
+    const totalWeightGrams = cart.reduce(
+      (sum, item) => sum + (item.notebook?.weight ?? 0) * item.quantity,
+      0
+    );
+    const shipping = Math.ceil(totalWeightGrams / 500) * SHIPPING_PER_500G;
+    const gst = cart.reduce((sum, item) => {
+      const itemTotal = (item.notebook?.price ?? 0) * item.quantity;
+      const gstPct = gstByCategory[item.notebook?.category ?? ""] ?? 0;
+      return sum + (itemTotal * gstPct) / 100;
+    }, 0);
+    return {
+      subtotal: sub,
+      shippingCharge: shipping,
+      gstAmount: Math.round(gst),
+      total: Math.round(sub + shipping + gst),
+    };
+  }, [cart, getTotalPrice, gstByCategory]);
 
   // Show loading state while checking auth
   if (authLoading) {
@@ -308,12 +345,22 @@ export default function Checkout() {
                     </div>
                   ))}
                 </div>
-                <div className="border-t border-gray-700 pt-4">
-                  <div className="flex justify-between text-lg font-bold">
-                    <span className="text-white">Total:</span>
-                    <span className="text-blue-400">
-                      {formatPrice(getTotalPrice())}
-                    </span>
+                <div className="border-t border-gray-700 pt-4 space-y-2">
+                  <div className="flex justify-between text-sm text-gray-400">
+                    <span>Subtotal</span>
+                    <span className="text-white">{formatPrice(subtotal)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm text-gray-400">
+                    <span>Shipping (Rs 26 per 500g)</span>
+                    <span className="text-white">{formatPrice(shippingCharge)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm text-gray-400">
+                    <span>GST</span>
+                    <span className="text-white">{formatPrice(gstAmount)}</span>
+                  </div>
+                  <div className="flex justify-between text-lg font-bold pt-2 border-t border-gray-600">
+                    <span className="text-white">Total</span>
+                    <span className="text-blue-400">{formatPrice(total)}</span>
                   </div>
                 </div>
               </div>
