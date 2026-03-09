@@ -45,8 +45,10 @@ export default function AdminInvoices() {
     try {
       const res = await api.post(`/admin/invoices/${id}/send`);
       setMessage({ type: "success", text: res.data?.message || "Invoice sent successfully" });
+      fetchInvoices();
     } catch (err) {
       setMessage({ type: "error", text: err.response?.data?.message || "Failed to send invoice" });
+      fetchInvoices();
     } finally {
       setSendingId(null);
     }
@@ -102,70 +104,114 @@ export default function AdminInvoices() {
               No invoices yet. Invoices are created when a payment succeeds.
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-700">
-                <thead>
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                      Invoice No
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                      Order ID
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                      Customer
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                      Email
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                      Date
-                    </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-700">
-                  {invoices.map((inv) => (
-                    <tr key={inv._id} className="bg-gray-800 hover:bg-gray-750">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">
-                        {inv.invoiceNumber}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                        {inv.orderId}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                        {inv.customerName}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                        {inv.customerEmail}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                        {formatDate(inv.createdAt)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
-                        <button
-                          type="button"
-                          onClick={() => handleView(inv._id)}
-                          className="text-blue-400 hover:text-blue-300 font-medium mr-4"
-                        >
-                          View
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleSend(inv._id)}
-                          disabled={sendingId === inv._id}
-                          className="text-green-400 hover:text-green-300 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          {sendingId === inv._id ? "Sending…" : "Send"}
-                        </button>
-                      </td>
+            <>
+              <div className="overflow-x-auto pb-3">
+                <table className="min-w-[1220px] w-full divide-y divide-gray-700">
+                  <thead>
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                        Invoice No
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                        Order ID
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                        Customer
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                        Email
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                        Date
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                        Last email
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                        Storage
+                      </th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">
+                        Actions
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-gray-700">
+                    {invoices.map((inv) => (
+                      <tr key={inv._id} className="bg-gray-800 hover:bg-gray-750">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">
+                          {inv.invoiceNumber}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                          {inv.orderId}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                          {inv.customerName}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                          {inv.customerEmail}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                          {formatDate(inv.createdAt)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300 min-w-[150px]">
+                          {inv.lastEmailError ? (
+                            <span
+                              className="text-red-400"
+                              title={inv.lastEmailError}
+                            >
+                              Failed
+                            </span>
+                          ) : inv.lastEmailSentAt ? (
+                            <span className="text-green-400" title="Sent successfully">
+                              Sent {formatDate(inv.lastEmailSentAt)}
+                            </span>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300 min-w-[120px]">
+                          {inv.pdfPath ? (
+                            <span className="text-green-400" title={inv.pdfPath}>
+                              Stored
+                            </span>
+                          ) : inv.lastStorageError ? (
+                            <span
+                              className="text-red-400"
+                              title={inv.lastStorageError}
+                            >
+                              Failed
+                            </span>
+                          ) : (
+                            "Pending"
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm min-w-[120px]">
+                          <button
+                            type="button"
+                            onClick={() => handleView(inv._id)}
+                            className="text-blue-400 hover:text-blue-300 font-medium mr-4"
+                          >
+                            View
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleSend(inv._id)}
+                            disabled={sendingId === inv._id}
+                            className="text-green-400 hover:text-green-300 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {sendingId === inv._id ? "Sending…" : "Send"}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="px-6 pb-4 text-xs text-gray-500">
+                Scroll horizontally to view all invoice columns.
+              </div>
+            </>
           )}
         </div>
       </div>

@@ -1,10 +1,6 @@
 "use client";
 
-<<<<<<< HEAD
-import { useState, useEffect, useMemo } from "react";
-=======
-import { useState, useEffect, useCallback } from "react";
->>>>>>> 90cc585 (zwitch and invoice)
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "../../contexts/AuthContext";
