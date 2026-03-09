@@ -38,6 +38,11 @@ export default function AdminSidebar({ isOpen, toggleSidebar }) {
       path: "/ijack/admin/invoices",
       icon: "📄",
     },
+    {
+      name: "Promo Codes",
+      path: "/ijack/admin/promo-codes",
+      icon: "🎟️",
+    },
   ];
 
   return (

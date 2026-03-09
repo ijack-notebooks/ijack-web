@@ -31,6 +31,11 @@ export default function Checkout() {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [promoInput, setPromoInput] = useState("");
+  const [promoError, setPromoError] = useState("");
+  const [appliedPromo, setAppliedPromo] = useState(null);
+  const [promoLoading, setPromoLoading] = useState(false);
+  const [availablePromos, setAvailablePromos] = useState([]);
 
   const loadLayerScript = useCallback((layerScriptUrl) => {
     return new Promise((resolve, reject) => {
@@ -125,6 +130,18 @@ export default function Checkout() {
     api.get("/notebooks/categories").then((res) => setCategories(res.data || [])).catch(() => setCategories([]));
   }, []);
 
+  // Fetch available promo codes for display
+  useEffect(() => {
+    api.get("/promo-codes/available").then((res) => setAvailablePromos(res.data || [])).catch(() => setAvailablePromos([]));
+  }, []);
+
+  // Clear applied promo when cart changes so discount stays correct for current total
+  const cartKey = cart.map((i) => `${i.notebookId}:${i.quantity}`).join(",");
+  useEffect(() => {
+    setAppliedPromo(null);
+    setPromoError("");
+  }, [cartKey]);
+
   // Update form data when user changes
   useEffect(() => {
     if (user && (!formData.name || !formData.email)) {
@@ -144,8 +161,8 @@ export default function Checkout() {
     );
   }, [categories]);
 
-  // Order totals: subtotal, shipping (Rs 26 per 500g), GST by category, total
-  const { subtotal, shippingCharge, gstAmount, total } = useMemo(() => {
+  // Order totals: subtotal, shipping (Rs 26 per 500g), GST by category, total before/after discount
+  const { subtotal, shippingCharge, gstAmount, totalBeforeDiscount, total, discountAmount } = useMemo(() => {
     const sub = getTotalPrice();
     const totalWeightGrams = cart.reduce(
       (sum, item) => sum + (item.notebook?.weight ?? 0) * item.quantity,
@@ -157,13 +174,17 @@ export default function Checkout() {
       const gstPct = gstByCategory[item.notebook?.category ?? ""] ?? 0;
       return sum + (itemTotal * gstPct) / 100;
     }, 0);
+    const beforeDiscount = Math.round(sub + shipping + gst);
+    const discount = appliedPromo?.discountAmount ?? 0;
     return {
       subtotal: sub,
       shippingCharge: shipping,
       gstAmount: Math.round(gst),
-      total: Math.round(sub + shipping + gst),
+      totalBeforeDiscount: beforeDiscount,
+      discountAmount: discount,
+      total: Math.max(0, beforeDiscount - discount),
     };
-  }, [cart, getTotalPrice, gstByCategory]);
+  }, [cart, getTotalPrice, gstByCategory, appliedPromo?.discountAmount]);
 
   // Show loading state while checking auth
   if (authLoading) {
@@ -196,6 +217,74 @@ export default function Checkout() {
     });
   };
 
+  const handleApplyPromo = async () => {
+    const code = promoInput.trim().toUpperCase();
+    if (!code) {
+      setPromoError("Enter a promo code");
+      return;
+    }
+    setPromoError("");
+    setPromoLoading(true);
+    try {
+      const res = await api.post("/promo-codes/validate", {
+        code,
+        amount: totalBeforeDiscount,
+      });
+      const data = res.data;
+      if (data.valid) {
+        setAppliedPromo({ code: data.code, discountAmount: data.discountAmount, message: data.message });
+        setPromoInput("");
+      } else {
+        setPromoError(data.message || "Invalid promo code");
+        setAppliedPromo(null);
+      }
+    } catch (err) {
+      setPromoError(err.response?.data?.message || "Could not validate code");
+      setAppliedPromo(null);
+    } finally {
+      setPromoLoading(false);
+    }
+  };
+
+  const handleRemovePromo = () => {
+    setAppliedPromo(null);
+    setPromoError("");
+    setPromoInput("");
+  };
+
+  const handleUsePromo = (code) => {
+    setPromoInput(code);
+    setPromoError("");
+    setAppliedPromo(null);
+    setPromoLoading(true);
+    api
+      .post("/promo-codes/validate", { code, amount: totalBeforeDiscount })
+      .then((res) => {
+        const data = res.data;
+        if (data.valid) {
+          setAppliedPromo({ code: data.code, discountAmount: data.discountAmount, message: data.message });
+          setPromoInput("");
+        } else {
+          setPromoError(data.message || "Code not applicable");
+        }
+      })
+      .catch(() => setPromoError("Could not apply code"))
+      .finally(() => setPromoLoading(false));
+  };
+
+  const formatPromoDescription = (promo) => {
+    const valueStr = promo.type === "percent" ? `${promo.value}% off` : `₹${Number(promo.value).toFixed(0)} off`;
+    if (promo.minOrderAmount && promo.minOrderAmount > 0) {
+      return `${valueStr} on orders above ${formatPrice(promo.minOrderAmount)}`;
+    }
+    return valueStr;
+  };
+
+  const formatValidUntil = (date) => {
+    if (!date) return null;
+    return new Date(date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
@@ -207,6 +296,7 @@ export default function Checkout() {
           notebookId: item.notebookId,
           quantity: item.quantity,
         })),
+        promoCode: appliedPromo?.code || undefined,
         contactDetails: {
           name: formData.name,
           email: formData.email,
@@ -420,6 +510,84 @@ export default function Checkout() {
                     </div>
                   ))}
                 </div>
+                {/* Promo code */}
+                <div className="border-t border-gray-700 pt-4 pb-4 space-y-3">
+                  {appliedPromo ? (
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <span className="text-sm text-green-400">
+                        Discount ({appliedPromo.code}): −{formatPrice(appliedPromo.discountAmount)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleRemovePromo}
+                        className="text-xs text-gray-400 hover:text-red-400 shrink-0"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-2 w-full min-w-0">
+                      <input
+                        type="text"
+                        value={promoInput}
+                        onChange={(e) => {
+                          setPromoInput(e.target.value.toUpperCase());
+                          setPromoError("");
+                        }}
+                        placeholder="Promo code"
+                        className="w-full min-w-0 rounded-md bg-gray-700 border border-gray-600 text-white text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 box-border"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleApplyPromo}
+                        disabled={promoLoading}
+                        className="w-full py-2 rounded-md bg-gray-700 border border-gray-600 text-white text-sm font-medium hover:bg-gray-600 disabled:opacity-50"
+                      >
+                        {promoLoading ? "Applying…" : "Apply"}
+                      </button>
+                    </div>
+                  )}
+                  {promoError && (
+                    <p className="text-xs text-red-400">{promoError}</p>
+                  )}
+                </div>
+                {/* Available promo codes */}
+                {availablePromos.length > 0 && (
+                  <div className="border-t border-gray-700 pt-4 pb-2">
+                    <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">Available offers</p>
+                    <ul className="space-y-2">
+                      {availablePromos.map((promo) => (
+                        <li
+                          key={promo.code}
+                          className="rounded-md bg-gray-700/60 border border-gray-600 p-3 text-sm"
+                        >
+                          <div className="flex flex-wrap items-start justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <span className="font-mono font-medium text-white">{promo.code}</span>
+                              <p className="text-gray-400 mt-0.5">{formatPromoDescription(promo)}</p>
+                              {promo.validUntil && (
+                                <p className="text-xs text-gray-500 mt-1">
+                                  Valid till {formatValidUntil(promo.validUntil)}
+                                  {promo.usesLeft != null && promo.usesLeft > 0 && (
+                                    <span> · {promo.usesLeft} uses left</span>
+                                  )}
+                                </p>
+                              )}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleUsePromo(promo.code)}
+                              disabled={promoLoading || (appliedPromo?.code === promo.code)}
+                              className="shrink-0 px-3 py-1.5 rounded bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {appliedPromo?.code === promo.code ? "Applied" : "Use code"}
+                            </button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
                 <div className="border-t border-gray-700 pt-4 space-y-2">
                   <div className="flex justify-between text-sm text-gray-400">
                     <span>Subtotal</span>
@@ -433,6 +601,12 @@ export default function Checkout() {
                     <span>GST</span>
                     <span className="text-white">{formatPrice(gstAmount)}</span>
                   </div>
+                  {appliedPromo && (
+                    <div className="flex justify-between text-sm text-green-400">
+                      <span>Discount ({appliedPromo.code})</span>
+                      <span>−{formatPrice(appliedPromo.discountAmount)}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between text-lg font-bold pt-2 border-t border-gray-600">
                     <span className="text-white">Total</span>
                     <span className="text-blue-400">{formatPrice(total)}</span>
