@@ -356,7 +356,7 @@ export default function AllOrders() {
                       </p>
                       <p className="text-white text-sm">
                         <span className="text-gray-400">Transaction ID:</span>{" "}
-                        {selectedOrder.payment.phonepeTransactionId || "N/A"}
+                        {selectedOrder.payment.paymentTransactionId || selectedOrder.payment.phonepeTransactionId || "N/A"}
                       </p>
                       <p className="text-white text-sm">
                         <span className="text-gray-400">Method:</span>{" "}

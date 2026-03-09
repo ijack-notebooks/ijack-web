@@ -18,6 +18,7 @@ const PAGE_TITLES = {
   "/ijack/admin/shipments": "Shipments",
   "/ijack/admin/products": "Products List",
   "/ijack/admin/product-types": "Type of Products",
+  "/ijack/admin/invoices": "Invoices",
   "/ijack/admin/profile": "Profile",
 };
 

@@ -33,6 +33,11 @@ export default function AdminSidebar({ isOpen, toggleSidebar }) {
       path: "/ijack/admin/product-types",
       icon: "🏷️",
     },
+    {
+      name: "Invoices",
+      path: "/ijack/admin/invoices",
+      icon: "📄",
+    },
   ];
 
   return (

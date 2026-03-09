@@ -1,6 +1,10 @@
 "use client";
 
+<<<<<<< HEAD
 import { useState, useEffect, useMemo } from "react";
+=======
+import { useState, useEffect, useCallback } from "react";
+>>>>>>> 90cc585 (zwitch and invoice)
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "../../contexts/AuthContext";
@@ -31,6 +35,80 @@ export default function Checkout() {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  const loadLayerScript = useCallback((layerScriptUrl) => {
+    return new Promise((resolve, reject) => {
+      if (typeof window === "undefined") {
+        reject(new Error("No window"));
+        return;
+      }
+      if (window.Layer) {
+        resolve();
+        return;
+      }
+      const existing = document.querySelector(`script[src="${layerScriptUrl}"]`);
+      if (existing) {
+        const check = () => (window.Layer ? resolve() : setTimeout(check, 50));
+        check();
+        return;
+      }
+      const script = document.createElement("script");
+      script.id = "context";
+      script.type = "text/javascript";
+      script.src = layerScriptUrl;
+      script.onload = () => {
+        const check = () => (window.Layer ? resolve() : setTimeout(check, 50));
+        check();
+      };
+      script.onerror = () => reject(new Error("Failed to load payment gateway"));
+      document.body.appendChild(script);
+    });
+  }, []);
+
+  const openZwitchLayer = useCallback(
+    (paymentToken, accessKey, merchantOrderId, layerScriptUrl) => {
+      loadLayerScript(layerScriptUrl)
+        .then(() => {
+          if (!window.Layer) {
+            setError("Payment gateway is still loading. Please try again.");
+            setLoading(false);
+            return;
+          }
+          window.Layer.checkout(
+        {
+          token: paymentToken,
+          accesskey: accessKey,
+          theme: {
+            color: "#2563eb",
+            error_color: "#ef4444",
+          },
+        },
+        (response) => {
+          if (response.status === "captured") {
+            sessionStorage.setItem("lastMerchantOrderId", merchantOrderId);
+            router.push(`/payment/callback?merchantOrderId=${encodeURIComponent(merchantOrderId)}`);
+          } else if (response.status === "failed") {
+            setError("Payment failed. You can try again.");
+            setLoading(false);
+          } else if (response.status === "cancelled") {
+            setError("Payment was cancelled.");
+            setLoading(false);
+          }
+        },
+        (err) => {
+          console.error("Layer checkout error:", err);
+          setError(err?.message || "Payment could not be opened. Please try again.");
+          setLoading(false);
+        }
+      );
+        })
+        .catch((err) => {
+          setError(err?.message || "Failed to load payment gateway.");
+          setLoading(false);
+        });
+    },
+    [router, loadLayerScript]
+  );
 
   useEffect(() => {
     if (authLoading) return;
@@ -147,22 +225,23 @@ export default function Checkout() {
         },
       };
 
-      // Initiate payment with PhonePe
       const paymentResponse = await api.post("/payment/initiate", orderData);
+      const data = paymentResponse.data;
 
-      if (paymentResponse.data.success && paymentResponse.data.paymentUrl) {
-        // Store merchantOrderId for retrieval in callback
-        if (paymentResponse.data.merchantOrderId) {
-          sessionStorage.setItem("lastMerchantOrderId", paymentResponse.data.merchantOrderId);
-        }
-        // Redirect to PhonePe payment page
-        window.location.href = paymentResponse.data.paymentUrl;
+      if (data.success && data.paymentToken && data.accessKey) {
+        sessionStorage.setItem("lastMerchantOrderId", data.merchantOrderId);
+        openZwitchLayer(
+          data.paymentToken,
+          data.accessKey,
+          data.merchantOrderId,
+          data.layerScriptUrl
+        );
       } else {
-        setError(paymentResponse.data.message || "Failed to initiate payment");
+        setError(data.message || "Failed to initiate payment");
         setLoading(false);
       }
-    } catch (error) {
-      setError(error.response?.data?.message || "Failed to initiate payment");
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to initiate payment");
       setLoading(false);
     }
   };

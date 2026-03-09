@@ -33,9 +33,7 @@ function PaymentCallbackContent() {
 
   const checkPaymentStatus = async () => {
     try {
-      // Get merchantOrderId from URL params
-      // PhonePe redirects with merchantOrderId or it might be in the URL
-      // Also check for orderId which PhonePe might send
+      // Get merchantOrderId from URL params (ZWITCH Layer redirects with merchantOrderId)
       const merchantOrderId =
         searchParams.get("merchantOrderId") ||
         searchParams.get("merchantTransactionId") ||
