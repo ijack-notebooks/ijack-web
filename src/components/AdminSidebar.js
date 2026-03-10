@@ -3,46 +3,23 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useAdminAuth } from "../contexts/AdminAuthContext";
 
 export default function AdminSidebar({ isOpen, toggleSidebar }) {
   const pathname = usePathname();
+  const { admin } = useAdminAuth();
 
   const menuItems = [
-    {
-      name: "Dashboard",
-      path: "/ijack/admin",
-      icon: "📊",
-    },
-    {
-      name: "All Orders",
-      path: "/ijack/admin/orders",
-      icon: "📦",
-    },
-    {
-      name: "Shipments",
-      path: "/ijack/admin/shipments",
-      icon: "🚚",
-    },
-    {
-      name: "Products List",
-      path: "/ijack/admin/products",
-      icon: "📚",
-    },
-    {
-      name: "Type of Products",
-      path: "/ijack/admin/product-types",
-      icon: "🏷️",
-    },
-    {
-      name: "Invoices",
-      path: "/ijack/admin/invoices",
-      icon: "📄",
-    },
-    {
-      name: "Promo Codes",
-      path: "/ijack/admin/promo-codes",
-      icon: "🎟️",
-    },
+    { name: "Dashboard", path: "/ijack/admin", icon: "📊" },
+    { name: "All Orders", path: "/ijack/admin/orders", icon: "📦" },
+    { name: "Shipments", path: "/ijack/admin/shipments", icon: "🚚" },
+    { name: "Products List", path: "/ijack/admin/products", icon: "📚" },
+    { name: "Type of Products", path: "/ijack/admin/product-types", icon: "🏷️" },
+    { name: "Invoices", path: "/ijack/admin/invoices", icon: "📄" },
+    { name: "Promo Codes", path: "/ijack/admin/promo-codes", icon: "🎟️" },
+    ...(admin?.role === "super-admin"
+      ? [{ name: "Admin User", path: "/ijack/admin/admin-users", icon: "👤" }]
+      : []),
   ];
 
   return (

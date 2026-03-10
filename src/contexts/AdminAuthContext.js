@@ -60,6 +60,20 @@ export function AdminAuthProvider({ children }) {
     }
   };
 
+  const loginWithGoogle = async (idToken) => {
+    try {
+      const response = await api.post("/admin/auth/google", { id_token: idToken });
+      localStorage.setItem("adminToken", response.data.token);
+      setAdmin(response.data.admin);
+      return { success: true };
+    } catch (error) {
+      return {
+        success: false,
+        message: error.response?.data?.message || "Google sign-in failed",
+      };
+    }
+  };
+
   const logout = () => {
     localStorage.removeItem("adminToken");
     setAdmin(null);
@@ -68,7 +82,7 @@ export function AdminAuthProvider({ children }) {
 
   return (
     <AdminAuthContext.Provider
-      value={{ admin, loading, login, logout, checkAdminAuth }}
+      value={{ admin, loading, login, loginWithGoogle, logout, checkAdminAuth }}
     >
       {children}
     </AdminAuthContext.Provider>

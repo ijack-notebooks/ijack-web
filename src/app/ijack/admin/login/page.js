@@ -3,13 +3,15 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAdminAuth } from "../../../../contexts/AdminAuthContext";
+import GoogleSignInButton from "../../../../components/GoogleSignInButton";
 
 export default function AdminLogin() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const { login } = useAdminAuth();
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const { login, loginWithGoogle } = useAdminAuth();
   const router = useRouter();
 
   const handleSubmit = async (e) => {
@@ -26,6 +28,23 @@ export default function AdminLogin() {
     }
 
     setLoading(false);
+  };
+
+  const handleGoogleSuccess = async (idToken) => {
+    setGoogleLoading(true);
+    setError("");
+    const result = await loginWithGoogle(idToken);
+    if (result.success) {
+      router.push("/ijack/admin");
+    } else {
+      setError(result.message);
+    }
+    setGoogleLoading(false);
+  };
+
+  const handleGoogleError = (message) => {
+    setError(message || "Google sign-in failed");
+    setGoogleLoading(false);
   };
 
   return (
@@ -92,6 +111,24 @@ export default function AdminLogin() {
             >
               {loading ? "Signing in..." : "Sign in"}
             </button>
+          </div>
+
+          <div className="relative my-4">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-600" />
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="px-2 bg-gray-800 text-gray-400">Or continue with</span>
+            </div>
+          </div>
+
+          <div>
+            <GoogleSignInButton
+              onSuccess={handleGoogleSuccess}
+              onError={handleGoogleError}
+              disabled={googleLoading}
+              loading={googleLoading}
+            />
           </div>
         </form>
       </div>

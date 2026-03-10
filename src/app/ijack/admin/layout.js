@@ -21,6 +21,7 @@ const PAGE_TITLES = {
   "/ijack/admin/invoices": "Invoices",
   "/ijack/admin/promo-codes": "Promo Codes",
   "/ijack/admin/profile": "Profile",
+  "/ijack/admin/admin-users": "Admin User",
 };
 
 const LOGIN_PATH = "/ijack/admin/login";

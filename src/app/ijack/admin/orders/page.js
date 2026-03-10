@@ -150,6 +150,20 @@ export default function AllOrders() {
   const getShipmentStatus = (order) => {
     const history = Array.isArray(order?.shiprocket?.history) ? order.shiprocket.history : [];
     const latestHistory = history.length ? history[history.length - 1] : null;
+    const latestAction = String(latestHistory?.action || "").toLowerCase();
+    const latestStatus = latestHistory?.status || null;
+
+    // Pickup actions should override stale trackingStatus values from courier feed.
+    if (latestAction === "pickup_cancelled") {
+      return { label: "Pickup Cancelled", className: "bg-amber-900/60 text-amber-300", clickable: true };
+    }
+    if (latestAction === "pickup_requested") {
+      return { label: "Pickup Requested", className: "bg-purple-900/60 text-purple-300", clickable: true };
+    }
+    if (latestAction === "pickup_cancel_failed") {
+      return { label: latestStatus || "Pickup Cancel Failed", className: "bg-red-900/60 text-red-300", clickable: true };
+    }
+
     const statusLabel =
       order?.shiprocket?.trackingStatus ||
       latestHistory?.status ||
