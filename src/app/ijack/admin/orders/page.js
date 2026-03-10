@@ -19,6 +19,9 @@ export default function AllOrders() {
   const [shiprocketConfig, setShiprocketConfig] = useState(null);
   const [shiprocketLoading, setShiprocketLoading] = useState(false);
   const [shiprocketError, setShiprocketError] = useState("");
+  const [trackingData, setTrackingData] = useState(null);
+  const [trackingLoading, setTrackingLoading] = useState(false);
+  const [trackingError, setTrackingError] = useState("");
 
   const fetchOrders = useCallback(async () => {
     try {
@@ -98,6 +101,28 @@ export default function AllOrders() {
       setShiprocketError(err.response?.data?.message || err.message || "Failed to create shipment");
     } finally {
       setShiprocketLoading(false);
+    }
+  };
+
+  const getShipmentStatus = (order) => {
+    if (!order?.shiprocket?.orderId) return { label: "No shipment", className: "bg-gray-700 text-gray-400" };
+    if (!order.shiprocket.awbCode) return { label: "Created", className: "bg-blue-900/60 text-blue-300" };
+    return { label: "AWB assigned", className: "bg-green-900/60 text-green-300" };
+  };
+
+  const fetchTracking = async () => {
+    const awb = selectedOrder?.shiprocket?.awbCode;
+    if (!awb) return;
+    setTrackingLoading(true);
+    setTrackingError("");
+    setTrackingData(null);
+    try {
+      const res = await api.get(`/admin/shiprocket/track/${encodeURIComponent(awb)}`);
+      setTrackingData(res.data);
+    } catch (err) {
+      setTrackingError(err.response?.data?.message || err.message || "Failed to load tracking");
+    } finally {
+      setTrackingLoading(false);
     }
   };
 
@@ -185,6 +210,9 @@ export default function AllOrders() {
                       Status
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                      Shipment
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
                       Date
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
@@ -196,7 +224,7 @@ export default function AllOrders() {
                   {orders.length === 0 ? (
                     <tr>
                       <td
-                        colSpan="8"
+                        colSpan="9"
                         className="px-6 py-8 text-center text-gray-400"
                       >
                         No orders found
@@ -263,6 +291,16 @@ export default function AllOrders() {
                             {order.status}
                           </span>
                         </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {(() => {
+                            const s = getShipmentStatus(order);
+                            return (
+                              <span className={`px-2 py-1 text-xs font-semibold rounded-full ${s.className}`} title={order.shiprocket?.awbCode ? `AWB: ${order.shiprocket.awbCode}` : undefined}>
+                                {s.label}
+                              </span>
+                            );
+                          })()}
+                        </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
                           {new Date(order.createdAt).toLocaleDateString()}
                         </td>
@@ -293,6 +331,8 @@ export default function AllOrders() {
                   onClick={() => {
                     setSelectedOrder(null);
                     setShiprocketError("");
+                    setTrackingData(null);
+                    setTrackingError("");
                   }}
                   className="text-gray-400 hover:text-white"
                 >
@@ -473,24 +513,104 @@ export default function AllOrders() {
                         <p className="text-red-400 text-sm">{shiprocketError}</p>
                       )}
                       {selectedOrder.shiprocket?.orderId ? (
-                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                          <div className="flex items-center gap-2">
-                            <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-900 text-green-300">
-                              Shipment created
-                            </span>
-                            <span className="text-sm text-gray-400">
-                              SR Order: {selectedOrder.shiprocket.orderId}
-                            </span>
+                        <div className="space-y-4">
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className={`px-2 py-1 text-xs font-semibold rounded-full ${getShipmentStatus(selectedOrder).className}`}>
+                                Shipment: {getShipmentStatus(selectedOrder).label}
+                              </span>
+                              {selectedOrder.shiprocket?.courierName && (
+                                <span className="text-sm text-gray-400">
+                                  {selectedOrder.shiprocket.courierName}
+                                </span>
+                              )}
+                              <span className="text-sm text-gray-400">
+                                SR Order: {selectedOrder.shiprocket.orderId}
+                              </span>
+                              {selectedOrder.shiprocket?.awbCode && (
+                                <span className="text-sm text-gray-400 font-mono">
+                                  AWB: {selectedOrder.shiprocket.awbCode}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {selectedOrder.shiprocket?.awbCode && (
+                                <button
+                                  type="button"
+                                  onClick={fetchTracking}
+                                  disabled={trackingLoading}
+                                  className="inline-flex items-center gap-1 bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg text-sm font-medium"
+                                >
+                                  {trackingLoading ? "Loading…" : "Track shipment"}
+                                </button>
+                              )}
+                              <Link
+                                href={`/ijack/admin/shipments?orderId=${selectedOrder._id}`}
+                                className="inline-flex items-center gap-1 text-blue-400 hover:text-blue-300 text-sm font-medium"
+                              >
+                                View Shipment
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                </svg>
+                              </Link>
+                            </div>
                           </div>
-                          <Link
-                            href={`/ijack/admin/shipments?orderId=${selectedOrder._id}`}
-                            className="inline-flex items-center gap-1 text-blue-400 hover:text-blue-300 text-sm font-medium"
-                          >
-                            View Shipment
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                            </svg>
-                          </Link>
+
+                          {/* Tracking details */}
+                          {trackingError && (
+                            <p className="text-red-400 text-sm">{trackingError}</p>
+                          )}
+                          {trackingData && (
+                            <div className="bg-gray-900 rounded-lg p-4 border border-gray-600">
+                              <p className="text-gray-400 text-xs font-medium uppercase tracking-wider mb-3">Tracking details</p>
+                              {trackingData.testMode && (
+                                <p className="text-amber-400 text-xs mb-2">(Test mode – mock data)</p>
+                              )}
+                              <div className="space-y-3 text-sm">
+                                <div className="flex flex-wrap gap-4">
+                                  <div>
+                                    <span className="text-gray-400">Status: </span>
+                                    <span className="text-white font-medium">
+                                      {trackingData.tracking_data?.status ?? trackingData.tracking_data?.current_status ?? trackingData.tracking_data?.track_status ?? trackingData.shipment_status ?? "—"}
+                                    </span>
+                                  </div>
+                                  {(trackingData.tracking_data?.edd || trackingData.tracking_data?.etd) && (
+                                    <div>
+                                      <span className="text-gray-400">EDD: </span>
+                                      <span className="text-white">
+                                        {new Date(trackingData.tracking_data.edd || trackingData.tracking_data.etd).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                                {(() => {
+                                  const scans = trackingData.tracking_data?.scan
+                                    ?? trackingData.tracking_data?.shipment_track_activities
+                                    ?? [];
+                                  return Array.isArray(scans) && scans.length > 0 ? (
+                                    <div>
+                                      <p className="text-gray-400 mb-2">Activity</p>
+                                      <ul className="space-y-2">
+                                        {scans.map((s, i) => (
+                                          <li key={i} className="flex flex-wrap gap-x-2 gap-y-1 text-gray-300 border-l-2 border-gray-600 pl-3 py-1">
+                                            <span className="text-gray-500 text-xs shrink-0">
+                                              {s.date ? new Date(s.date).toLocaleString("en-IN") : "—"}
+                                            </span>
+                                            <span className="text-white">{s.activity ?? s.status ?? s["sr-status-label"] ?? "—"}</span>
+                                            {(s.location || s.origin) && <span className="text-gray-400">· {s.location ?? s.origin}</span>}
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  ) : trackingData.tracking_data ? (
+                                    <pre className="text-xs text-gray-400 overflow-x-auto whitespace-pre-wrap max-h-48">
+                                      {JSON.stringify(trackingData.tracking_data, null, 2)}
+                                    </pre>
+                                  ) : null;
+                                })()}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       ) : (
                         <div className="flex flex-wrap gap-2">

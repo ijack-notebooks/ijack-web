@@ -121,6 +121,23 @@ function ShipmentsContent() {
     }
   };
 
+  const cancelShipment = async () => {
+    if (!selectedOrder?.shiprocket?.orderId) return;
+    if (!confirm("Cancel this Shiprocket shipment? The order will be removed from the shipments list and you can create a new shipment from All Orders if needed.")) return;
+    setActionLoading(true);
+    setActionError("");
+    try {
+      await api.post("/admin/shiprocket/cancel", { orderId: selectedOrder._id });
+      setSelectedOrder(null);
+      setTrackingData(null);
+      await fetchOrders();
+    } catch (err) {
+      setActionError(err.response?.data?.message || err.message || "Failed to cancel shipment");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   if (!admin) return null;
 
   if (loading) {
@@ -148,9 +165,9 @@ function ShipmentsContent() {
 
         <div className="mb-6 flex items-center justify-between">
           <h2 className="text-2xl font-bold text-white">Shipments</h2>
-          {shiprocketConfig?.testMode && (
-            <span className="px-2 py-1 text-xs font-semibold rounded bg-amber-600 text-amber-100">
-              Test mode
+          {shiprocketConfig?.configured && (
+            <span className={`px-2 py-1 text-xs font-semibold rounded ${shiprocketConfig?.testMode ? "bg-amber-600 text-amber-100" : "bg-green-700 text-green-100"}`}>
+              {shiprocketConfig?.testMode ? "Test mode" : "Live"}
             </span>
           )}
         </div>
@@ -279,6 +296,13 @@ function ShipmentsContent() {
                         </button>
                       </>
                     )}
+                    <button
+                      onClick={cancelShipment}
+                      disabled={actionLoading}
+                      className="bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium"
+                    >
+                      {actionLoading ? "..." : "Cancel shipment"}
+                    </button>
                   </div>
                   {selectedOrder.shiprocket?.labelUrl && (
                     <div className="mt-3">
