@@ -22,6 +22,12 @@ function ShipmentsContent() {
   const [actionError, setActionError] = useState("");
   const [trackingData, setTrackingData] = useState(null);
 
+  const getTrackingUrl = (order) =>
+    order?.shiprocket?.trackingUrl ||
+    (order?.shiprocket?.awbCode
+      ? `https://track.shiprocket.in/tracking/${encodeURIComponent(order.shiprocket.awbCode)}`
+      : null);
+
   const fetchOrders = useCallback(async () => {
     try {
       setLoading(true);
@@ -43,6 +49,14 @@ function ShipmentsContent() {
   useEffect(() => {
     if (!admin) return;
     fetchOrders();
+  }, [admin, fetchOrders]);
+
+  useEffect(() => {
+    if (!admin) return undefined;
+    const intervalId = setInterval(() => {
+      fetchOrders();
+    }, 30000);
+    return () => clearInterval(intervalId);
   }, [admin, fetchOrders]);
 
   useEffect(() => {
@@ -210,7 +224,7 @@ function ShipmentsContent() {
                   >
                     <div className="text-sm font-mono text-white truncate">{order._id?.slice(0, 8)}...</div>
                     <div className="text-xs text-gray-400">
-                      {order.user?.username || order.contactDetails?.name || "—"} • {order.shiprocket?.awbCode ? "AWB assigned" : "Awaiting AWB"}
+                      {order.user?.username || order.contactDetails?.name || "—"} • {order.shiprocket?.trackingStatus || (order.shiprocket?.awbCode ? "AWB assigned" : "Awaiting AWB")}
                     </div>
                   </button>
                 ))
@@ -271,16 +285,16 @@ function ShipmentsContent() {
                         {selectedOrder.address?.street}, {selectedOrder.address?.city}, {selectedOrder.address?.state} {selectedOrder.address?.zipCode}, {selectedOrder.address?.country}
                       </p>
                     </div>
-                    {selectedOrder.shiprocket?.trackingUrl && (
+                    {getTrackingUrl(selectedOrder) && (
                       <div className="col-span-2">
                         <p className="text-gray-400">Tracking URL</p>
                         <a
-                          href={selectedOrder.shiprocket.trackingUrl}
+                          href={getTrackingUrl(selectedOrder)}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-blue-400 hover:underline break-all"
                         >
-                          {selectedOrder.shiprocket.trackingUrl}
+                          {getTrackingUrl(selectedOrder)}
                         </a>
                       </div>
                     )}

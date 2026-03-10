@@ -15,6 +15,12 @@ export default function Orders() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  const getTrackingUrl = (order) =>
+    order?.shiprocket?.trackingUrl ||
+    (order?.shiprocket?.awbCode
+      ? `https://track.shiprocket.in/tracking/${encodeURIComponent(order.shiprocket.awbCode)}`
+      : null);
+
   const fetchOrders = useCallback(async () => {
     try {
       const response = await api.get("/orders/my-orders");
@@ -37,6 +43,14 @@ export default function Orders() {
 
     fetchOrders();
   }, [user, authLoading, router, fetchOrders]);
+
+  useEffect(() => {
+    if (!user || authLoading) return undefined;
+    const intervalId = setInterval(() => {
+      fetchOrders();
+    }, 30000);
+    return () => clearInterval(intervalId);
+  }, [user, authLoading, fetchOrders]);
 
   if (authLoading || loading) {
     return (
@@ -77,7 +91,7 @@ export default function Orders() {
               <div className="text-6xl mb-4">📦</div>
               <h2 className="text-2xl font-bold text-white mb-2">No orders yet</h2>
               <p className="text-gray-400 mb-8">
-                You haven't placed any orders yet. Start exploring our high-quality notebooks!
+                You haven&apos;t placed any orders yet. Start exploring our high-quality notebooks!
               </p>
               <Link
                 href="/notebooks"
@@ -111,15 +125,28 @@ export default function Orders() {
                       </div>
                       <div className="text-right">
                         <p className="text-sm text-gray-400 mb-1 uppercase tracking-wider">Status</p>
-                        <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold uppercase ${
-                          order.status === "delivered" 
+                        {(() => {
+                          const statusLabel = order.shiprocket?.trackingStatus || order.status;
+                          const normalizedStatus = String(statusLabel || "").toLowerCase();
+                          const statusClassName = normalizedStatus.includes("delivered")
                             ? "bg-green-900/40 text-green-400 border border-green-800"
-                            : order.status === "cancelled"
+                            : normalizedStatus.includes("cancel")
                             ? "bg-red-900/40 text-red-400 border border-red-800"
-                            : "bg-blue-900/40 text-blue-400 border border-blue-800"
+                            : normalizedStatus.includes("shipped") ||
+                                normalizedStatus.includes("transit") ||
+                                normalizedStatus.includes("out for delivery")
+                            ? "bg-cyan-900/40 text-cyan-400 border border-cyan-800"
+                            : normalizedStatus.includes("processing") || normalizedStatus.includes("awb")
+                            ? "bg-amber-900/40 text-amber-400 border border-amber-800"
+                            : "bg-blue-900/40 text-blue-400 border border-blue-800";
+                          return (
+                        <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold uppercase ${
+                          statusClassName
                         }`}>
-                          {order.status}
+                          {statusLabel}
                         </span>
+                          );
+                        })()}
                       </div>
                       <div className="text-right">
                         <p className="text-sm text-gray-400 mb-1 uppercase tracking-wider">Payment</p>
@@ -158,12 +185,24 @@ export default function Orders() {
                       </div>
                     </div>
 
-                    <div className="border-t border-gray-700 mt-6 pt-6 flex justify-between items-center">
+                    <div className="border-t border-gray-700 mt-6 pt-6 flex flex-wrap justify-between items-center gap-4">
                       <div className="text-gray-400 text-sm">
                         Ordered by <span className="text-gray-300 font-medium">{order.contactDetails?.name}</span>
                       </div>
-                      <div className="text-xl font-bold text-blue-400">
-                        Total: {formatPrice(order.totalAmount)}
+                      <div className="flex items-center gap-3">
+                        {order.shiprocket?.awbCode && (
+                          <a
+                            href={getTrackingUrl(order)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm text-cyan-400 hover:text-cyan-300 font-medium"
+                          >
+                            Track delivery
+                          </a>
+                        )}
+                        <div className="text-xl font-bold text-blue-400">
+                          Total: {formatPrice(order.totalAmount)}
+                        </div>
                       </div>
                     </div>
                   </div>
