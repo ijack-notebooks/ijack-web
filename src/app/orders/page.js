@@ -14,12 +14,34 @@ export default function Orders() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [trackingModalOrder, setTrackingModalOrder] = useState(null);
+  const [trackingData, setTrackingData] = useState(null);
+  const [trackingLoading, setTrackingLoading] = useState(false);
+  const [trackingError, setTrackingError] = useState("");
 
-  const getTrackingUrl = (order) =>
-    order?.shiprocket?.trackingUrl ||
-    (order?.shiprocket?.awbCode
-      ? `https://track.shiprocket.in/tracking/${encodeURIComponent(order.shiprocket.awbCode)}`
-      : null);
+  const getTrackingUrl = (order) => order?.shiprocket?.trackingUrl || null;
+
+  const openTrackingModal = useCallback(async (order) => {
+    if (!order?.shiprocket?.awbCode) return;
+    setTrackingModalOrder(order);
+    setTrackingData(null);
+    setTrackingError("");
+    setTrackingLoading(true);
+    try {
+      const res = await api.get(`/orders/${order._id}/tracking`);
+      setTrackingData(res.data);
+    } catch (err) {
+      setTrackingError(err.response?.data?.message || err.message || "Failed to load tracking");
+    } finally {
+      setTrackingLoading(false);
+    }
+  }, []);
+
+  const closeTrackingModal = useCallback(() => {
+    setTrackingModalOrder(null);
+    setTrackingData(null);
+    setTrackingError("");
+  }, []);
 
   const fetchOrders = useCallback(async () => {
     try {
@@ -189,16 +211,30 @@ export default function Orders() {
                       <div className="text-gray-400 text-sm">
                         Ordered by <span className="text-gray-300 font-medium">{order.contactDetails?.name}</span>
                       </div>
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3 flex-wrap">
                         {order.shiprocket?.awbCode && (
+                          <button
+                            type="button"
+                            onClick={() => openTrackingModal(order)}
+                            className="text-sm text-cyan-400 hover:text-cyan-300 font-medium underline"
+                          >
+                            View tracking
+                          </button>
+                        )}
+                        {getTrackingUrl(order) && (
                           <a
                             href={getTrackingUrl(order)}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-sm text-cyan-400 hover:text-cyan-300 font-medium"
+                            className="text-sm text-gray-400 hover:text-gray-300"
                           >
-                            Track delivery
+                            Open courier link
                           </a>
+                        )}
+                        {order.shiprocket?.awbCode && !getTrackingUrl(order) && (
+                          <span className="text-sm text-gray-400">
+                            Live tracking in modal; courier link after first scan.
+                          </span>
                         )}
                         <div className="text-xl font-bold text-blue-400">
                           Total: {formatPrice(order.totalAmount)}
@@ -208,6 +244,93 @@ export default function Orders() {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* Tracking details modal */}
+          {trackingModalOrder && (
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70"
+              onClick={(e) => e.target === e.currentTarget && closeTrackingModal()}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="tracking-modal-title"
+            >
+              <div className="bg-gray-800 border border-gray-600 rounded-xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-hidden flex flex-col">
+                <div className="p-4 border-b border-gray-700 flex justify-between items-center">
+                  <h2 id="tracking-modal-title" className="text-lg font-semibold text-white">
+                    Tracking — {trackingModalOrder.shiprocket?.awbCode || "—"}
+                  </h2>
+                  <button
+                    type="button"
+                    onClick={closeTrackingModal}
+                    className="text-gray-400 hover:text-white p-1 rounded"
+                    aria-label="Close"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="p-4 overflow-y-auto flex-1">
+                  {trackingLoading && (
+                    <div className="flex justify-center py-8">
+                      <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-cyan-500" />
+                    </div>
+                  )}
+                  {!trackingLoading && trackingError && (
+                    <div className="bg-red-900/30 border border-red-700 text-red-200 px-4 py-3 rounded-lg">
+                      {trackingError}
+                    </div>
+                  )}
+                  {!trackingLoading && !trackingError && trackingData && (() => {
+                    const td = trackingData.tracking_data || trackingData;
+                    const status = td?.status ?? td?.current_status ?? trackingData.current_status ?? trackingModalOrder?.shiprocket?.trackingStatus ?? "—";
+                    const edd = td?.edd ?? td?.delivered_date ?? (Array.isArray(td?.shipment_track) && td.shipment_track[0]?.delivered_date ? td.shipment_track[0].delivered_date : null);
+                    const scans = Array.isArray(td?.scan) ? td.scan : Array.isArray(td?.shipment_track_activities) ? td.shipment_track_activities : [];
+                    return (
+                      <div className="space-y-4">
+                        {trackingData.testMode && (
+                          <p className="text-amber-400 text-sm">Test mode — sample data</p>
+                        )}
+                        <div className="grid grid-cols-2 gap-3 text-sm">
+                          <div>
+                            <p className="text-gray-400 uppercase tracking-wider">Status</p>
+                            <p className="text-white font-medium">{String(status)}</p>
+                          </div>
+                          {edd && (
+                            <div>
+                              <p className="text-gray-400 uppercase tracking-wider">Expected delivery</p>
+                              <p className="text-white font-medium">
+                                {new Date(edd).toLocaleDateString("en-IN", { dateStyle: "medium" })}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                        {scans.length > 0 && (
+                          <div>
+                            <p className="text-gray-400 uppercase tracking-wider text-sm mb-2">Activity</p>
+                            <ul className="space-y-2">
+                              {scans.map((s, i) => (
+                                <li key={i} className="flex gap-3 text-sm">
+                                  <span className="text-gray-500 shrink-0">
+                                    {s.date ? new Date(s.date).toLocaleString("en-IN", { dateStyle: "short", timeStyle: "short" }) : "—"}
+                                  </span>
+                                  <span className="text-gray-300">
+                                    {s.activity ?? s.status ?? "—"}
+                                    {s.location ? ` · ${s.location}` : ""}
+                                  </span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        {scans.length === 0 && !trackingData.testMode && (
+                          <p className="text-gray-400 text-sm">No scan events yet. Updates appear after the courier scans your package.</p>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
             </div>
           )}
         </div>

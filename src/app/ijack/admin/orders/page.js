@@ -14,6 +14,8 @@ export default function AllOrders() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [selectedOrder, setSelectedOrder] = useState(null);
+  const [shipmentHistoryOrder, setShipmentHistoryOrder] = useState(null);
+  const [paymentHistoryOrder, setPaymentHistoryOrder] = useState(null);
   const [statusFilter, setStatusFilter] = useState("all");
   const [paymentFilter, setPaymentFilter] = useState("all");
   const [shiprocketConfig, setShiprocketConfig] = useState(null);
@@ -28,18 +30,7 @@ export default function AllOrders() {
   const fetchOrders = useCallback(async () => {
     try {
       setLoading(true);
-      // Try Supabase first, fallback to MongoDB
-      let response;
-      try {
-        response = await api.get("/supabase/orders");
-      } catch (supabaseError) {
-        console.warn(
-          "Supabase orders failed, falling back to MongoDB:",
-          supabaseError,
-        );
-        // Fallback to MongoDB
-        response = await api.get("/admin/orders");
-      }
+      const response = await api.get("/admin/orders");
 
       let filteredOrders = response.data;
 
@@ -120,6 +111,12 @@ export default function AllOrders() {
     try {
       const res = await api.post(`/admin/orders/${selectedOrder._id}/cancel`);
       setSelectedOrder(res.data);
+      if (shipmentHistoryOrder?._id === res.data?._id) {
+        setShipmentHistoryOrder(res.data);
+      }
+      if (paymentHistoryOrder?._id === res.data?._id) {
+        setPaymentHistoryOrder(res.data);
+      }
       await fetchOrders();
     } catch (err) {
       setCancelRefundError(err.response?.data?.message || err.message || "Failed to cancel order");
@@ -130,12 +127,18 @@ export default function AllOrders() {
 
   const refundOrder = async () => {
     if (!selectedOrder) return;
-    if (!confirm(`Refund ${formatPrice(selectedOrder.totalAmount)} for this order? The payment will be refunded via ZWITCH and the order will be marked cancelled. This cannot be undone.`)) return;
+    if (!confirm(`Cancel this order, cancel any active shipment, and refund ${formatPrice(selectedOrder.totalAmount)} to the customer via ZWITCH? This cannot be undone.`)) return;
     setCancelRefundLoading(true);
     setCancelRefundError("");
     try {
       const res = await api.post(`/admin/orders/${selectedOrder._id}/refund`);
       setSelectedOrder(res.data.order);
+      if (shipmentHistoryOrder?._id === res.data.order?._id) {
+        setShipmentHistoryOrder(res.data.order);
+      }
+      if (paymentHistoryOrder?._id === res.data.order?._id) {
+        setPaymentHistoryOrder(res.data.order);
+      }
       await fetchOrders();
     } catch (err) {
       setCancelRefundError(err.response?.data?.message || err.message || "Refund failed");
@@ -145,20 +148,148 @@ export default function AllOrders() {
   };
 
   const getShipmentStatus = (order) => {
-    if (!order?.shiprocket?.orderId) return { label: "No shipment", className: "bg-gray-700 text-gray-400" };
-    const liveStatus = order.shiprocket?.trackingStatus;
-    if (liveStatus) {
-      const normalized = String(liveStatus).toLowerCase();
-      if (normalized.includes("delivered")) {
-        return { label: liveStatus, className: "bg-green-900/60 text-green-300" };
-      }
-      if (normalized.includes("cancel")) {
-        return { label: liveStatus, className: "bg-red-900/60 text-red-300" };
-      }
-      return { label: liveStatus, className: "bg-cyan-900/60 text-cyan-300" };
+    const history = Array.isArray(order?.shiprocket?.history) ? order.shiprocket.history : [];
+    const latestHistory = history.length ? history[history.length - 1] : null;
+    const statusLabel =
+      order?.shiprocket?.trackingStatus ||
+      latestHistory?.status ||
+      (order?.shiprocket?.awbCode ? "AWB assigned" : null) ||
+      (order?.shiprocket?.orderId ? "Created" : null);
+
+    if (!statusLabel) {
+      return { label: "No shipment", className: "bg-gray-700 text-gray-400", clickable: false };
     }
-    if (!order.shiprocket.awbCode) return { label: "Created", className: "bg-blue-900/60 text-blue-300" };
-    return { label: "AWB assigned", className: "bg-green-900/60 text-green-300" };
+
+    const normalized = String(statusLabel).toLowerCase();
+    if (normalized.includes("delivered")) {
+      return { label: statusLabel, className: "bg-green-900/60 text-green-300", clickable: true };
+    }
+    if (normalized.includes("cancel")) {
+      return { label: statusLabel, className: "bg-red-900/60 text-red-300", clickable: true };
+    }
+    if (normalized.includes("created")) {
+      return { label: statusLabel, className: "bg-blue-900/60 text-blue-300", clickable: true };
+    }
+    if (normalized.includes("awb")) {
+      return { label: statusLabel, className: "bg-green-900/60 text-green-300", clickable: true };
+    }
+    if (normalized.includes("pickup")) {
+      return { label: statusLabel, className: "bg-purple-900/60 text-purple-300", clickable: true };
+    }
+    return { label: statusLabel, className: "bg-cyan-900/60 text-cyan-300", clickable: true };
+  };
+
+  const getShipmentHistory = (order) =>
+    [...(Array.isArray(order?.shiprocket?.history) ? order.shiprocket.history : [])]
+      .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+
+  const formatShipmentAction = (action) =>
+    String(action || "updated")
+      .split("_")
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ");
+
+  const getPaymentStatus = (order) => {
+    if (order?.payment?.refundedAt) {
+      return { label: "REFUNDED", className: "bg-slate-800 text-slate-200", clickable: true };
+    }
+
+    const statusLabel = order?.payment?.paymentStatus || "PENDING";
+    if (statusLabel === "SUCCESS") {
+      return { label: "SUCCESS", className: "bg-green-900 text-green-300", clickable: true };
+    }
+    if (statusLabel === "FAILED") {
+      return { label: "FAILED", className: "bg-red-900 text-red-300", clickable: true };
+    }
+    if (statusLabel === "CANCELLED") {
+      return { label: "CANCELLED", className: "bg-red-950 text-red-300", clickable: true };
+    }
+    return { label: statusLabel, className: "bg-yellow-900 text-yellow-300", clickable: true };
+  };
+
+  const getPaymentHistory = (order) => {
+    const history = [...(Array.isArray(order?.payment?.history) ? order.payment.history : [])];
+    const hasAction = (matcher) => history.some((entry) => matcher(entry));
+
+    if (order?.payment?.merchantOrderId && !hasAction((entry) => entry.action === "payment_initiated")) {
+      history.push({
+        action: "payment_initiated",
+        status: order?.payment?.paymentStatus || "PENDING",
+        message: "Payment was initiated for this order.",
+        data: {
+          amount: order?.payment?.amount ?? order?.totalAmount ?? null,
+          merchantOrderId: order.payment.merchantOrderId,
+        },
+        at: order?.createdAt,
+      });
+    }
+
+    if (
+      order?.payment?.paymentStatus === "SUCCESS" &&
+      !hasAction((entry) => entry.action === "payment_captured" || entry.status === "SUCCESS")
+    ) {
+      history.push({
+        action: "payment_captured",
+        status: "SUCCESS",
+        message: "Payment was captured successfully.",
+        data: {
+          transactionId:
+            order?.payment?.paymentTransactionId || order?.payment?.phonepeTransactionId || null,
+        },
+        at: order?.createdAt,
+      });
+    }
+
+    if (
+      (order?.payment?.paymentStatus === "FAILED" || order?.payment?.paymentStatus === "CANCELLED") &&
+      !hasAction((entry) => entry.status === "FAILED" || entry.action === "payment_failed")
+    ) {
+      history.push({
+        action:
+          order?.payment?.paymentStatus === "CANCELLED" ? "payment_cancelled" : "payment_failed",
+        status: order?.payment?.paymentStatus,
+        message:
+          order?.payment?.paymentStatus === "CANCELLED"
+            ? "Payment was cancelled."
+            : "Payment failed.",
+        at: order?.createdAt,
+      });
+    }
+
+    if (
+      order?.payment?.refundedAt &&
+      !hasAction((entry) => String(entry.action || "").includes("refund"))
+    ) {
+      history.push({
+        action: "refund_initiated",
+        status: "REFUNDED",
+        message: "Refund was initiated for this payment.",
+        data: {
+          transactionId:
+            order?.payment?.paymentTransactionId || order?.payment?.phonepeTransactionId || null,
+        },
+        at: order.payment.refundedAt,
+      });
+    }
+
+    return history.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+  };
+
+  const formatPaymentAction = (action) =>
+    String(action || "updated")
+      .split("_")
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ");
+
+  const getPaymentMethodLabel = (method, paymentStatus) => {
+    if (!method) {
+      return paymentStatus === "SUCCESS" ? "Online" : "—";
+    }
+    const m = String(method).toLowerCase();
+    if (m === "upi") return "UPI";
+    if (m === "netbanking" || m === "net_banking") return "Net banking";
+    if (m === "card" || m === "credit_card" || m === "debit_card") return "Card";
+    return method;
   };
 
   const fetchTracking = async () => {
@@ -201,8 +332,8 @@ export default function AllOrders() {
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div className="flex items-center gap-3">
                   <h2 className="text-2xl font-bold text-white">Orders</h2>
-                  <div className="bg-green-900/30 border border-green-700 text-green-300 px-2 py-1 rounded text-xs font-medium">
-                    📊 Supabase
+                  <div className="bg-blue-900/30 border border-blue-700 text-blue-300 px-2 py-1 rounded text-xs font-medium">
+                    Live MongoDB
                   </div>
                 </div>
                 <div className="flex gap-3 flex-wrap">
@@ -313,17 +444,19 @@ export default function AllOrders() {
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <span
-                            className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                              order.payment?.paymentStatus === "SUCCESS"
-                                ? "bg-green-900 text-green-300"
-                                : order.payment?.paymentStatus === "FAILED"
-                                  ? "bg-red-900 text-red-300"
-                                  : "bg-yellow-900 text-yellow-300"
-                            }`}
-                          >
-                            {order.payment?.paymentStatus || "PENDING"}
-                          </span>
+                          {(() => {
+                            const p = getPaymentStatus(order);
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => setPaymentHistoryOrder(order)}
+                                className={`px-2 py-1 text-xs font-semibold rounded-full hover:opacity-90 ${p.className}`}
+                                title="View payment history"
+                              >
+                                {p.label}
+                              </button>
+                            );
+                          })()}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span
@@ -346,9 +479,20 @@ export default function AllOrders() {
                           {(() => {
                             const s = getShipmentStatus(order);
                             return (
-                              <span className={`px-2 py-1 text-xs font-semibold rounded-full ${s.className}`} title={order.shiprocket?.awbCode ? `AWB: ${order.shiprocket.awbCode}` : undefined}>
-                                {s.label}
-                              </span>
+                              s.clickable ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setShipmentHistoryOrder(order)}
+                                  className={`px-2 py-1 text-xs font-semibold rounded-full ${s.className} hover:opacity-90`}
+                                  title={order.shiprocket?.awbCode ? `AWB: ${order.shiprocket.awbCode}` : "View shipment history"}
+                                >
+                                  {s.label}
+                                </button>
+                              ) : (
+                                <span className={`px-2 py-1 text-xs font-semibold rounded-full ${s.className}`}>
+                                  {s.label}
+                                </span>
+                              )
                             );
                           })()}
                         </td>
@@ -420,17 +564,18 @@ export default function AllOrders() {
                   </div>
                   <div>
                     <p className="text-gray-400 text-sm">Payment Status</p>
-                    <span
-                      className={`px-2 py-1 text-xs font-semibold rounded-full inline-block mt-1 ${
-                        selectedOrder.payment?.paymentStatus === "SUCCESS"
-                          ? "bg-green-900 text-green-300"
-                          : selectedOrder.payment?.paymentStatus === "FAILED"
-                            ? "bg-red-900 text-red-300"
-                            : "bg-yellow-900 text-yellow-300"
-                      }`}
-                    >
-                      {selectedOrder.payment?.paymentStatus || "PENDING"}
-                    </span>
+                    {(() => {
+                      const p = getPaymentStatus(selectedOrder);
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => setPaymentHistoryOrder(selectedOrder)}
+                          className={`px-2 py-1 text-xs font-semibold rounded-full inline-block mt-1 hover:opacity-90 ${p.className}`}
+                        >
+                          {p.label}
+                        </button>
+                      );
+                    })()}
                   </div>
                 </div>
 
@@ -451,9 +596,16 @@ export default function AllOrders() {
                         {selectedOrder.payment.paymentTransactionId || selectedOrder.payment.phonepeTransactionId || "N/A"}
                       </p>
                       <p className="text-white text-sm">
-                        <span className="text-gray-400">Method:</span>{" "}
-                        {selectedOrder.payment.paymentMethod || "Online"}
+                        <span className="text-gray-400">Mode of payment:</span>{" "}
+                        {getPaymentMethodLabel(selectedOrder.payment.paymentMethod, selectedOrder.payment?.paymentStatus)}
                       </p>
+                      <button
+                        type="button"
+                        onClick={() => setPaymentHistoryOrder(selectedOrder)}
+                        className="text-sm text-blue-400 hover:text-blue-300"
+                      >
+                        View payment history
+                      </button>
                     </div>
                   </div>
                 )}
@@ -485,14 +637,14 @@ export default function AllOrders() {
                   </div>
                 </div>
 
-                {/* Cancel & Refund */}
+                {/* Cancel order (refund disabled) */}
                 <div>
-                  <p className="text-gray-400 text-sm mb-2">Cancel & Refund</p>
+                  <p className="text-gray-400 text-sm mb-2">Cancel order</p>
                   {cancelRefundError && (
                     <p className="text-red-400 text-sm mb-2">{cancelRefundError}</p>
                   )}
                   <div className="flex flex-wrap gap-3">
-                    {selectedOrder.status !== "cancelled" && (
+                    {selectedOrder.status !== "cancelled" ? (
                       <button
                         type="button"
                         onClick={cancelOrder}
@@ -501,17 +653,7 @@ export default function AllOrders() {
                       >
                         {cancelRefundLoading ? "..." : "Cancel order"}
                       </button>
-                    )}
-                    {selectedOrder.payment?.paymentStatus === "SUCCESS" && !selectedOrder.payment?.refundedAt && selectedOrder.status !== "cancelled" && (
-                      <button
-                        type="button"
-                        onClick={refundOrder}
-                        disabled={cancelRefundLoading}
-                        className="bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium"
-                      >
-                        {cancelRefundLoading ? "..." : "Refund payment"}
-                      </button>
-                    )}
+                    ) : null}
                     {selectedOrder.payment?.refundedAt && (
                       <span className="px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-700 text-gray-400">
                         Refunded on {new Date(selectedOrder.payment.refundedAt).toLocaleString()}
@@ -519,7 +661,7 @@ export default function AllOrders() {
                     )}
                   </div>
                   <p className="text-xs text-gray-500 mt-2">
-                    Cancel: sets order to cancelled and cancels Shiprocket shipment if any. Refund: processes refund via ZWITCH and marks order cancelled.
+                    Cancel order and any active Shiprocket shipment. Refund is not initiated from here.
                   </p>
                 </div>
 
@@ -602,7 +744,7 @@ export default function AllOrders() {
                       {shiprocketError && (
                         <p className="text-red-400 text-sm">{shiprocketError}</p>
                       )}
-                      {selectedOrder.shiprocket?.orderId ? (
+                      {selectedOrder.shiprocket?.orderId && selectedOrder.shiprocket?.active !== false ? (
                         <div className="space-y-4">
                           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                             <div className="flex items-center gap-2 flex-wrap">
@@ -702,6 +844,39 @@ export default function AllOrders() {
                             </div>
                           )}
                         </div>
+                      ) : selectedOrder.shiprocket?.history?.length ? (
+                        <div className="space-y-3">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className={`px-2 py-1 text-xs font-semibold rounded-full ${getShipmentStatus(selectedOrder).className}`}>
+                              Shipment: {getShipmentStatus(selectedOrder).label}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setShipmentHistoryOrder(selectedOrder)}
+                              className="text-sm text-blue-400 hover:text-blue-300"
+                            >
+                              View shipment history
+                            </button>
+                          </div>
+                          {selectedOrder.status === "cancelled" || selectedOrder.payment?.refundedAt ? (
+                            <p className="text-amber-400 text-sm">
+                              Shipment cannot be created for cancelled or refunded orders.
+                            </p>
+                          ) : (
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                onClick={shiprocketCreateOrder}
+                                disabled={shiprocketLoading}
+                                className="bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white px-3 py-2 rounded-lg text-sm font-medium"
+                              >
+                                {shiprocketLoading ? "..." : "Create Shipment"}
+                              </button>
+                              <p className="text-xs text-gray-400 self-center">
+                                Previous shipment is preserved in history. Create a new shipment to continue fulfilment.
+                              </p>
+                            </div>
+                          )}
+                        </div>
                       ) : selectedOrder.status === "cancelled" || selectedOrder.payment?.refundedAt ? (
                         <p className="text-amber-400 text-sm">
                           Shipment cannot be created for cancelled or refunded orders.
@@ -723,6 +898,176 @@ export default function AllOrders() {
                     </div>
                   )}
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {paymentHistoryOrder && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-gray-800 rounded-lg max-w-3xl w-full max-h-[85vh] overflow-y-auto border border-gray-700">
+              <div className="p-6 border-b border-gray-700 flex justify-between items-center">
+                <div>
+                  <h2 className="text-2xl font-bold text-white">Payment History</h2>
+                  <p className="text-sm text-gray-400 mt-1 font-mono">
+                    {paymentHistoryOrder._id}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setPaymentHistoryOrder(null)}
+                  className="text-gray-400 hover:text-white"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="p-6 space-y-4">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <p className="text-gray-400">Current payment status</p>
+                    <p className="text-white">{getPaymentStatus(paymentHistoryOrder).label}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-400">Mode of payment</p>
+                    <p className="text-white">{getPaymentMethodLabel(paymentHistoryOrder.payment?.paymentMethod, paymentHistoryOrder.payment?.paymentStatus)}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-400">Merchant Order ID</p>
+                    <p className="text-white font-mono">{paymentHistoryOrder.payment?.merchantOrderId || "—"}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-400">Transaction ID</p>
+                    <p className="text-white font-mono">
+                      {paymentHistoryOrder.payment?.paymentTransactionId ||
+                        paymentHistoryOrder.payment?.phonepeTransactionId ||
+                        "—"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-gray-400">Amount</p>
+                    <p className="text-white">{formatPrice(paymentHistoryOrder.payment?.amount || paymentHistoryOrder.totalAmount || 0)}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-400">Refunded At</p>
+                    <p className="text-white">
+                      {paymentHistoryOrder.payment?.refundedAt
+                        ? new Date(paymentHistoryOrder.payment.refundedAt).toLocaleString("en-IN")
+                        : "—"}
+                    </p>
+                  </div>
+                </div>
+
+                {getPaymentHistory(paymentHistoryOrder).length === 0 ? (
+                  <p className="text-gray-400 text-sm">No payment history has been recorded for this order yet.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {getPaymentHistory(paymentHistoryOrder).map((entry, index) => (
+                      <div
+                        key={`${entry.action}-${entry.at}-${index}`}
+                        className="bg-gray-700 rounded-lg p-4 border border-gray-600"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-white font-medium">{formatPaymentAction(entry.action)}</span>
+                            {entry.status && (
+                              <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-800 text-gray-300 border border-gray-600">
+                                {entry.status}
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-xs text-gray-400">
+                            {entry.at ? new Date(entry.at).toLocaleString("en-IN") : "—"}
+                          </span>
+                        </div>
+                        {entry.message && (
+                          <p className="text-sm text-gray-300 mt-2">{entry.message}</p>
+                        )}
+                        {entry.data && (
+                          <pre className="mt-3 text-xs text-gray-400 overflow-x-auto whitespace-pre-wrap bg-gray-800 rounded-lg p-3">
+                            {JSON.stringify(entry.data, null, 2)}
+                          </pre>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {shipmentHistoryOrder && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-gray-800 rounded-lg max-w-3xl w-full max-h-[85vh] overflow-y-auto border border-gray-700">
+              <div className="p-6 border-b border-gray-700 flex justify-between items-center">
+                <div>
+                  <h2 className="text-2xl font-bold text-white">Shipment History</h2>
+                  <p className="text-sm text-gray-400 mt-1 font-mono">
+                    {shipmentHistoryOrder._id}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShipmentHistoryOrder(null)}
+                  className="text-gray-400 hover:text-white"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="p-6 space-y-4">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <p className="text-gray-400">Current shipment status</p>
+                    <p className="text-white">{getShipmentStatus(shipmentHistoryOrder).label}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-400">AWB</p>
+                    <p className="text-white font-mono">{shipmentHistoryOrder.shiprocket?.awbCode || "—"}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-400">SR Order ID</p>
+                    <p className="text-white">{shipmentHistoryOrder.shiprocket?.orderId ?? "—"}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-400">Shipment ID</p>
+                    <p className="text-white">{shipmentHistoryOrder.shiprocket?.shipmentId ?? "—"}</p>
+                  </div>
+                </div>
+
+                {getShipmentHistory(shipmentHistoryOrder).length === 0 ? (
+                  <p className="text-gray-400 text-sm">No shipment history has been recorded for this order yet.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {getShipmentHistory(shipmentHistoryOrder).map((entry, index) => (
+                      <div
+                        key={`${entry.action}-${entry.at}-${index}`}
+                        className="bg-gray-700 rounded-lg p-4 border border-gray-600"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-white font-medium">{formatShipmentAction(entry.action)}</span>
+                            {entry.status && (
+                              <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-800 text-gray-300 border border-gray-600">
+                                {entry.status}
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-xs text-gray-400">
+                            {entry.at ? new Date(entry.at).toLocaleString("en-IN") : "—"}
+                          </span>
+                        </div>
+                        {entry.message && (
+                          <p className="text-sm text-gray-300 mt-2">{entry.message}</p>
+                        )}
+                        {entry.data && (
+                          <pre className="mt-3 text-xs text-gray-400 overflow-x-auto whitespace-pre-wrap bg-gray-800 rounded-lg p-3">
+                            {JSON.stringify(entry.data, null, 2)}
+                          </pre>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </div>

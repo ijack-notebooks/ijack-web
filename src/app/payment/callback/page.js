@@ -39,11 +39,18 @@ function PaymentCallbackContent() {
         searchParams.get("merchantTransactionId") ||
         searchParams.get("transactionId") ||
         searchParams.get("orderId");
+      const paymentMethodFromUrl = searchParams.get("paymentMethod");
+      const paymentMethodFromSession = sessionStorage.getItem("lastPaymentMethod");
+      const paymentMethod = paymentMethodFromUrl || paymentMethodFromSession;
 
       if (!merchantOrderId) {
-        // If no merchantOrderId in URL, try to get it from sessionStorage (stored during checkout)
         const storedOrderId = sessionStorage.getItem("lastMerchantOrderId");
         if (storedOrderId) {
+          if (paymentMethod) {
+            await api
+              .post("/payment/method", { merchantOrderId: storedOrderId, paymentMethod })
+              .catch(() => {});
+          }
           const response = await api.get(`/payment/status/${storedOrderId}`);
           handlePaymentResponse(response);
           return;
@@ -52,6 +59,12 @@ function PaymentCallbackContent() {
         setError("Payment information not found");
         setChecking(false);
         return;
+      }
+
+      if (paymentMethod) {
+        await api
+          .post("/payment/method", { merchantOrderId, paymentMethod })
+          .catch(() => {});
       }
 
       // Check payment status
@@ -74,6 +87,7 @@ function PaymentCallbackContent() {
       setChecking(false);
       sessionStorage.removeItem("paymentCheckAttempt");
       sessionStorage.removeItem("lastMerchantOrderId");
+      sessionStorage.removeItem("lastPaymentMethod");
       // Redirect to order confirmation after 2 seconds
       setTimeout(() => {
         router.push(`/order-confirmation/${response.data.orderId}`);
@@ -83,6 +97,7 @@ function PaymentCallbackContent() {
       setChecking(false);
       sessionStorage.removeItem("paymentCheckAttempt");
       sessionStorage.removeItem("lastMerchantOrderId");
+      sessionStorage.removeItem("lastPaymentMethod");
     } else {
       // Still pending, poll again (max 15 attempts to avoid infinite loop)
       const maxAttempts = 15;

@@ -21,12 +21,9 @@ function ShipmentsContent() {
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState("");
   const [trackingData, setTrackingData] = useState(null);
+  const [trackingModalOpen, setTrackingModalOpen] = useState(false);
 
-  const getTrackingUrl = (order) =>
-    order?.shiprocket?.trackingUrl ||
-    (order?.shiprocket?.awbCode
-      ? `https://track.shiprocket.in/tracking/${encodeURIComponent(order.shiprocket.awbCode)}`
-      : null);
+  const getTrackingUrl = (order) => order?.shiprocket?.trackingUrl || null;
 
   const fetchOrders = useCallback(async () => {
     try {
@@ -34,7 +31,7 @@ function ShipmentsContent() {
       // Use admin/orders (MongoDB) so we get full order schema including shiprocket
       const response = await api.get("/admin/orders");
       const all = response.data || [];
-      const withShipment = all.filter((o) => o.shiprocket?.orderId);
+      const withShipment = all.filter((o) => o.shiprocket?.orderId && o.shiprocket?.active !== false);
       setOrders(withShipment);
       return withShipment;
     } catch (err) {
@@ -107,13 +104,24 @@ function ShipmentsContent() {
     }
   };
 
+  const PICKUP_ACTIONS = ["pickup_requested", "pickup_cancelled", "pickup_cancel_failed"];
+  const isPickupRequested = (order) => {
+    const history = Array.isArray(order?.shiprocket?.history) ? order.shiprocket.history : [];
+    const pickupEntries = history.filter((e) => PICKUP_ACTIONS.includes(e.action));
+    if (pickupEntries.length === 0) return false;
+    const sorted = [...pickupEntries].sort((a, b) => new Date(b.at) - new Date(a.at));
+    return sorted[0].action === "pickup_requested";
+  };
+
   const requestPickup = async () => {
     if (!selectedOrder) return;
     setActionLoading(true);
     setActionError("");
     try {
-      await api.post("/admin/shiprocket/generate-pickup", { orderId: selectedOrder._id });
+      const res = await api.post("/admin/shiprocket/generate-pickup", { orderId: selectedOrder._id });
       setActionError("");
+      if (res.data?.order) setSelectedOrder(res.data.order);
+      else await fetchOrders();
       alert("Pickup request submitted to Shiprocket.");
     } catch (err) {
       setActionError(err.response?.data?.message || err.message || "Failed to request pickup");
@@ -122,15 +130,33 @@ function ShipmentsContent() {
     }
   };
 
-  const track = async () => {
+  const cancelPickup = async () => {
+    if (!selectedOrder) return;
+    if (!confirm("Cancel only the scheduled pickup? The shipment will remain active.")) return;
+    setActionLoading(true);
+    setActionError("");
+    try {
+      const res = await api.post("/admin/shiprocket/cancel-pickup", { orderId: selectedOrder._id });
+      setActionError("");
+      if (res.data?.order) setSelectedOrder(res.data.order);
+      else await fetchOrders();
+    } catch (err) {
+      setActionError(err.response?.data?.message || err.message || "Failed to cancel pickup");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const openTrackingModal = async () => {
     const awb = selectedOrder?.shiprocket?.awbCode;
     if (!awb) {
       setActionError("Assign AWB first to get tracking.");
       return;
     }
-    setActionLoading(true);
+    setTrackingModalOpen(true);
     setActionError("");
     setTrackingData(null);
+    setActionLoading(true);
     try {
       const res = await api.get(`/admin/shiprocket/track/${awb}`);
       setTrackingData(res.data);
@@ -141,13 +167,22 @@ function ShipmentsContent() {
     }
   };
 
+  const closeTrackingModal = () => {
+    setTrackingModalOpen(false);
+    setTrackingData(null);
+    setActionError("");
+  };
+
   const cancelShipment = async () => {
     if (!selectedOrder?.shiprocket?.orderId) return;
     if (!confirm("Cancel this Shiprocket shipment? The order will be removed from the shipments list and you can create a new shipment from All Orders if needed.")) return;
     setActionLoading(true);
     setActionError("");
     try {
-      await api.post("/admin/shiprocket/cancel", { orderId: selectedOrder._id });
+      const res = await api.post("/admin/shiprocket/cancel", { orderId: selectedOrder._id });
+      if (res.data?.warning) {
+        alert(res.data.message);
+      }
       setSelectedOrder(null);
       setTrackingData(null);
       await fetchOrders();
@@ -216,6 +251,7 @@ function ShipmentsContent() {
                       setSelectedOrder(order);
                       router.replace(`/ijack/admin/shipments?orderId=${order._id}`, { scroll: false });
                       setTrackingData(null);
+                      setTrackingModalOpen(false);
                       setActionError("");
                     }}
                     className={`w-full text-left px-4 py-3 border-b border-gray-700 hover:bg-gray-700 transition-colors ${
@@ -285,7 +321,7 @@ function ShipmentsContent() {
                         {selectedOrder.address?.street}, {selectedOrder.address?.city}, {selectedOrder.address?.state} {selectedOrder.address?.zipCode}, {selectedOrder.address?.country}
                       </p>
                     </div>
-                    {getTrackingUrl(selectedOrder) && (
+                    {getTrackingUrl(selectedOrder) ? (
                       <div className="col-span-2">
                         <p className="text-gray-400">Tracking URL</p>
                         <a
@@ -297,7 +333,15 @@ function ShipmentsContent() {
                           {getTrackingUrl(selectedOrder)}
                         </a>
                       </div>
-                    )}
+                    ) : selectedOrder.shiprocket?.awbCode ? (
+                      <div className="col-span-2">
+                        <p className="text-gray-400">Tracking URL</p>
+                        <p className="text-sm text-gray-400">
+                          Public tracking link will become available after the courier performs the first scan. Use
+                          {" "}&quot;Live tracking&quot; for API status meanwhile.
+                        </p>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
 
@@ -325,19 +369,29 @@ function ShipmentsContent() {
                         >
                           {actionLoading ? "..." : "Get Label"}
                         </button>
+                        {isPickupRequested(selectedOrder) ? (
+                          <button
+                            onClick={cancelPickup}
+                            disabled={actionLoading}
+                            className="bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium"
+                          >
+                            {actionLoading ? "..." : "Cancel Pickup"}
+                          </button>
+                        ) : (
+                          <button
+                            onClick={requestPickup}
+                            disabled={actionLoading}
+                            className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium"
+                          >
+                            {actionLoading ? "..." : "Request Pickup"}
+                          </button>
+                        )}
                         <button
-                          onClick={requestPickup}
-                          disabled={actionLoading}
-                          className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium"
-                        >
-                          {actionLoading ? "..." : "Request Pickup"}
-                        </button>
-                        <button
-                          onClick={track}
+                          onClick={openTrackingModal}
                           disabled={actionLoading}
                           className="bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium"
                         >
-                          {actionLoading ? "..." : "Track"}
+                          {actionLoading ? "..." : "Live tracking"}
                         </button>
                       </>
                     )}
@@ -363,14 +417,88 @@ function ShipmentsContent() {
                   )}
                 </div>
 
-                {trackingData && (
-                  <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
-                    <h3 className="text-lg font-semibold text-white mb-4">Tracking</h3>
-                    {trackingData.testMode && (
-                      <p className="text-amber-400 text-sm mb-2">(Test mode – mock data)</p>
-                    )}
-                    <div className="bg-gray-900 rounded p-4 text-sm text-gray-300 overflow-x-auto">
-                      <pre className="whitespace-pre-wrap">{JSON.stringify(trackingData, null, 2)}</pre>
+                {trackingModalOpen && selectedOrder && (
+                  <div
+                    className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70"
+                    onClick={(e) => e.target === e.currentTarget && closeTrackingModal()}
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="admin-tracking-modal-title"
+                  >
+                    <div className="bg-gray-800 border border-gray-600 rounded-xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-hidden flex flex-col">
+                      <div className="p-4 border-b border-gray-700 flex justify-between items-center">
+                        <h2 id="admin-tracking-modal-title" className="text-lg font-semibold text-white">
+                          Live tracking — {selectedOrder.shiprocket?.awbCode || "—"}
+                        </h2>
+                        <button
+                          type="button"
+                          onClick={closeTrackingModal}
+                          className="text-gray-400 hover:text-white p-1 rounded"
+                          aria-label="Close"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      <div className="p-4 overflow-y-auto flex-1">
+                        {actionLoading && (
+                          <div className="flex justify-center py-8">
+                            <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-cyan-500" />
+                          </div>
+                        )}
+                        {!actionLoading && actionError && (
+                          <div className="bg-red-900/30 border border-red-700 text-red-200 px-4 py-3 rounded-lg">
+                            {actionError}
+                          </div>
+                        )}
+                        {!actionLoading && !actionError && trackingData && (() => {
+                          const td = trackingData.tracking_data || trackingData;
+                          const status = td?.status ?? td?.current_status ?? trackingData.current_status ?? selectedOrder?.shiprocket?.trackingStatus ?? "—";
+                          const edd = td?.edd ?? td?.delivered_date ?? (Array.isArray(td?.shipment_track) && td.shipment_track[0]?.delivered_date ? td.shipment_track[0].delivered_date : null);
+                          const scans = Array.isArray(td?.scan) ? td.scan : Array.isArray(td?.shipment_track_activities) ? td.shipment_track_activities : [];
+                          return (
+                            <div className="space-y-4">
+                              {trackingData.testMode && (
+                                <p className="text-amber-400 text-sm">Test mode — sample data</p>
+                              )}
+                              <div className="grid grid-cols-2 gap-3 text-sm">
+                                <div>
+                                  <p className="text-gray-400 uppercase tracking-wider">Status</p>
+                                  <p className="text-white font-medium">{String(status)}</p>
+                                </div>
+                                {edd && (
+                                  <div>
+                                    <p className="text-gray-400 uppercase tracking-wider">Expected delivery</p>
+                                    <p className="text-white font-medium">
+                                      {new Date(edd).toLocaleDateString("en-IN", { dateStyle: "medium" })}
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                              {scans.length > 0 && (
+                                <div>
+                                  <p className="text-gray-400 uppercase tracking-wider text-sm mb-2">Activity</p>
+                                  <ul className="space-y-2">
+                                    {scans.map((s, i) => (
+                                      <li key={i} className="flex gap-3 text-sm">
+                                        <span className="text-gray-500 shrink-0">
+                                          {s.date ? new Date(s.date).toLocaleString("en-IN", { dateStyle: "short", timeStyle: "short" }) : "—"}
+                                        </span>
+                                        <span className="text-gray-300">
+                                          {s.activity ?? s.status ?? "—"}
+                                          {s.location ? ` · ${s.location}` : ""}
+                                        </span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                              {scans.length === 0 && !trackingData.testMode && (
+                                <p className="text-gray-400 text-sm">No scan events yet. Updates appear after the courier scans the package.</p>
+                              )}
+                            </div>
+                          );
+                        })()}
+                      </div>
                     </div>
                   </div>
                 )}

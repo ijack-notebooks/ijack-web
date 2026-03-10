@@ -66,6 +66,21 @@ export default function Checkout() {
     });
   }, []);
 
+  const extractLayerPaymentMethod = useCallback((response) => {
+    const raw =
+      response?.type_name ||
+      response?.payment?.type_name ||
+      response?.payment_instrument?.type_name ||
+      response?.payment_instrument?.type ||
+      response?.payment_method;
+    if (!raw || typeof raw !== "string") return "";
+    const t = raw.toLowerCase().trim().replace(/[-\s]+/g, "_");
+    if (t.includes("net") && t.includes("bank")) return "netbanking";
+    if (t.includes("card")) return "card";
+    if (t.includes("upi")) return "upi";
+    return raw;
+  }, []);
+
   const openZwitchLayer = useCallback(
     (paymentToken, accessKey, merchantOrderId, layerScriptUrl) => {
       loadLayerScript(layerScriptUrl)
@@ -87,7 +102,17 @@ export default function Checkout() {
         (response) => {
           if (response.status === "captured") {
             sessionStorage.setItem("lastMerchantOrderId", merchantOrderId);
-            router.push(`/payment/callback?merchantOrderId=${encodeURIComponent(merchantOrderId)}`);
+            const paymentMethod = extractLayerPaymentMethod(response);
+            if (paymentMethod) {
+              sessionStorage.setItem("lastPaymentMethod", paymentMethod);
+            } else {
+              sessionStorage.removeItem("lastPaymentMethod");
+            }
+            router.push(
+              `/payment/callback?merchantOrderId=${encodeURIComponent(merchantOrderId)}${
+                paymentMethod ? `&paymentMethod=${encodeURIComponent(paymentMethod)}` : ""
+              }`
+            );
           } else if (response.status === "failed") {
             setError("Payment failed. You can try again.");
             setLoading(false);
@@ -97,7 +122,6 @@ export default function Checkout() {
           }
         },
         (err) => {
-          console.error("Layer checkout error:", err);
           setError(err?.message || "Payment could not be opened. Please try again.");
           setLoading(false);
         }
@@ -108,7 +132,7 @@ export default function Checkout() {
           setLoading(false);
         });
     },
-    [router, loadLayerScript]
+    [router, loadLayerScript, extractLayerPaymentMethod]
   );
 
   useEffect(() => {
