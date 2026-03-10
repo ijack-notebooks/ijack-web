@@ -65,7 +65,13 @@ function ShipmentsContent() {
       setSelectedOrder(res.data.order);
       await fetchOrders();
     } catch (err) {
-      setActionError(err.response?.data?.message || err.message || "Failed to assign AWB");
+      const data = err.response?.data;
+      let msg = data?.message || err.message || "Failed to assign AWB";
+      const details = data?.details;
+      if (details != null) {
+        msg += typeof details === "string" ? ` — ${details}` : ` — ${details?.message || details?.error || JSON.stringify(details)}`;
+      }
+      setActionError(msg);
     } finally {
       setActionLoading(false);
     }
@@ -247,12 +253,37 @@ function ShipmentsContent() {
                       <p className="text-gray-400">Courier</p>
                       <p className="text-white">{selectedOrder.shiprocket?.courierName ?? "—"}</p>
                     </div>
+                    <div>
+                      <p className="text-gray-400">Live status</p>
+                      <p className="text-white">{selectedOrder.shiprocket?.trackingStatus ?? "Awaiting webhook update"}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-400">Last webhook</p>
+                      <p className="text-white">
+                        {selectedOrder.shiprocket?.lastWebhookAt
+                          ? new Date(selectedOrder.shiprocket.lastWebhookAt).toLocaleString("en-IN")
+                          : "—"}
+                      </p>
+                    </div>
                     <div className="col-span-2">
                       <p className="text-gray-400">Delivery address</p>
                       <p className="text-white">
                         {selectedOrder.address?.street}, {selectedOrder.address?.city}, {selectedOrder.address?.state} {selectedOrder.address?.zipCode}, {selectedOrder.address?.country}
                       </p>
                     </div>
+                    {selectedOrder.shiprocket?.trackingUrl && (
+                      <div className="col-span-2">
+                        <p className="text-gray-400">Tracking URL</p>
+                        <a
+                          href={selectedOrder.shiprocket.trackingUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-400 hover:underline break-all"
+                        >
+                          {selectedOrder.shiprocket.trackingUrl}
+                        </a>
+                      </div>
+                    )}
                   </div>
                 </div>
 

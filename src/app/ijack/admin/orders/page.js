@@ -22,6 +22,8 @@ export default function AllOrders() {
   const [trackingData, setTrackingData] = useState(null);
   const [trackingLoading, setTrackingLoading] = useState(false);
   const [trackingError, setTrackingError] = useState("");
+  const [cancelRefundLoading, setCancelRefundLoading] = useState(false);
+  const [cancelRefundError, setCancelRefundError] = useState("");
 
   const fetchOrders = useCallback(async () => {
     try {
@@ -98,14 +100,63 @@ export default function AllOrders() {
       await fetchOrders();
       router.push(`/ijack/admin/shipments?orderId=${selectedOrder._id}`);
     } catch (err) {
-      setShiprocketError(err.response?.data?.message || err.message || "Failed to create shipment");
+      const data = err.response?.data;
+      let msg = data?.message || err.message || "Failed to create shipment";
+      const details = data?.details;
+      if (details != null) {
+        msg += typeof details === "string" ? ` — ${details}` : ` — ${details?.message || details?.error || JSON.stringify(details)}`;
+      }
+      setShiprocketError(msg);
     } finally {
       setShiprocketLoading(false);
     }
   };
 
+  const cancelOrder = async () => {
+    if (!selectedOrder) return;
+    if (!confirm("Cancel this order? Order status will be set to cancelled." + (selectedOrder.shiprocket?.orderId ? " Any Shiprocket shipment will also be cancelled." : ""))) return;
+    setCancelRefundLoading(true);
+    setCancelRefundError("");
+    try {
+      const res = await api.post(`/admin/orders/${selectedOrder._id}/cancel`);
+      setSelectedOrder(res.data);
+      await fetchOrders();
+    } catch (err) {
+      setCancelRefundError(err.response?.data?.message || err.message || "Failed to cancel order");
+    } finally {
+      setCancelRefundLoading(false);
+    }
+  };
+
+  const refundOrder = async () => {
+    if (!selectedOrder) return;
+    if (!confirm(`Refund ${formatPrice(selectedOrder.totalAmount)} for this order? The payment will be refunded via ZWITCH and the order will be marked cancelled. This cannot be undone.`)) return;
+    setCancelRefundLoading(true);
+    setCancelRefundError("");
+    try {
+      const res = await api.post(`/admin/orders/${selectedOrder._id}/refund`);
+      setSelectedOrder(res.data.order);
+      await fetchOrders();
+    } catch (err) {
+      setCancelRefundError(err.response?.data?.message || err.message || "Refund failed");
+    } finally {
+      setCancelRefundLoading(false);
+    }
+  };
+
   const getShipmentStatus = (order) => {
     if (!order?.shiprocket?.orderId) return { label: "No shipment", className: "bg-gray-700 text-gray-400" };
+    const liveStatus = order.shiprocket?.trackingStatus;
+    if (liveStatus) {
+      const normalized = String(liveStatus).toLowerCase();
+      if (normalized.includes("delivered")) {
+        return { label: liveStatus, className: "bg-green-900/60 text-green-300" };
+      }
+      if (normalized.includes("cancel")) {
+        return { label: liveStatus, className: "bg-red-900/60 text-red-300" };
+      }
+      return { label: liveStatus, className: "bg-cyan-900/60 text-cyan-300" };
+    }
     if (!order.shiprocket.awbCode) return { label: "Created", className: "bg-blue-900/60 text-blue-300" };
     return { label: "AWB assigned", className: "bg-green-900/60 text-green-300" };
   };
@@ -333,6 +384,7 @@ export default function AllOrders() {
                     setShiprocketError("");
                     setTrackingData(null);
                     setTrackingError("");
+                    setCancelRefundError("");
                   }}
                   className="text-gray-400 hover:text-white"
                 >
@@ -431,6 +483,44 @@ export default function AllOrders() {
                       </button>
                     ))}
                   </div>
+                </div>
+
+                {/* Cancel & Refund */}
+                <div>
+                  <p className="text-gray-400 text-sm mb-2">Cancel & Refund</p>
+                  {cancelRefundError && (
+                    <p className="text-red-400 text-sm mb-2">{cancelRefundError}</p>
+                  )}
+                  <div className="flex flex-wrap gap-3">
+                    {selectedOrder.status !== "cancelled" && (
+                      <button
+                        type="button"
+                        onClick={cancelOrder}
+                        disabled={cancelRefundLoading}
+                        className="bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium"
+                      >
+                        {cancelRefundLoading ? "..." : "Cancel order"}
+                      </button>
+                    )}
+                    {selectedOrder.payment?.paymentStatus === "SUCCESS" && !selectedOrder.payment?.refundedAt && selectedOrder.status !== "cancelled" && (
+                      <button
+                        type="button"
+                        onClick={refundOrder}
+                        disabled={cancelRefundLoading}
+                        className="bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium"
+                      >
+                        {cancelRefundLoading ? "..." : "Refund payment"}
+                      </button>
+                    )}
+                    {selectedOrder.payment?.refundedAt && (
+                      <span className="px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-700 text-gray-400">
+                        Refunded on {new Date(selectedOrder.payment.refundedAt).toLocaleString()}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">
+                    Cancel: sets order to cancelled and cancels Shiprocket shipment if any. Refund: processes refund via ZWITCH and marks order cancelled.
+                  </p>
                 </div>
 
                 <div>
@@ -612,6 +702,10 @@ export default function AllOrders() {
                             </div>
                           )}
                         </div>
+                      ) : selectedOrder.status === "cancelled" || selectedOrder.payment?.refundedAt ? (
+                        <p className="text-amber-400 text-sm">
+                          Shipment cannot be created for cancelled or refunded orders.
+                        </p>
                       ) : (
                         <div className="flex flex-wrap gap-2">
                           <button
