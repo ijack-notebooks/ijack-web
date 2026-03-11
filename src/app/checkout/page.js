@@ -154,10 +154,23 @@ export default function Checkout() {
     api.get("/notebooks/categories").then((res) => setCategories(res.data || [])).catch(() => setCategories([]));
   }, []);
 
-  // Fetch available promo codes for display
-  useEffect(() => {
-    api.get("/promo-codes/available").then((res) => setAvailablePromos(res.data || [])).catch(() => setAvailablePromos([]));
+  // Fetch available promo codes for display (same API as rest of app; retry once on failure)
+  const fetchAvailablePromos = useCallback(async (retries = 2) => {
+    try {
+      const res = await api.get("/promo-codes/available");
+      setAvailablePromos(Array.isArray(res.data) ? res.data : []);
+    } catch (err) {
+      if (retries > 0) {
+        setTimeout(() => fetchAvailablePromos(retries - 1), 800);
+      } else {
+        setAvailablePromos([]);
+      }
+    }
   }, []);
+
+  useEffect(() => {
+    fetchAvailablePromos();
+  }, [fetchAvailablePromos]);
 
   // Clear applied promo when cart changes so discount stays correct for current total
   const cartKey = cart.map((i) => `${i.notebookId}:${i.quantity}`).join(",");

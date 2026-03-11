@@ -18,7 +18,7 @@ const getImageUrl = (imagePath) => {
   if (imagePath.startsWith("/uploads")) {
     const baseUrl = process.env.NEXT_PUBLIC_API_URL
       ? process.env.NEXT_PUBLIC_API_URL.replace("/api", "")
-      : "https://ijack-server.onrender.com";
+      : "https://ijack-server-pbdb.onrender.com";
     return `${baseUrl}${imagePath}`;
   }
   return imagePath;
@@ -215,7 +215,7 @@ export default function ProductsList() {
 
       const API_URL =
         process.env.NEXT_PUBLIC_API_URL ||
-        "https://ijack-server.onrender.com/api";
+        "https://ijack-server-pbdb.onrender.com/api";
 
       const response = await axios.post(
         `${API_URL}/admin/products`,
@@ -372,7 +372,7 @@ export default function ProductsList() {
         }
         const API_URL =
           process.env.NEXT_PUBLIC_API_URL ||
-          "https://ijack-server.onrender.com/api";
+          "https://ijack-server-pbdb.onrender.com/api";
         await axios.patch(
           `${API_URL}/admin/products/${editingProductId}`,
           formDataToSend,

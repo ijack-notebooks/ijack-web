@@ -30,13 +30,13 @@ npm install
 
 ```env
 # For production (default)
-NEXT_PUBLIC_API_URL=https://ijack-server.onrender.com/api
+NEXT_PUBLIC_API_URL=https://ijack-server-pbdb.onrender.com/api
 
 # For local development, use:
 # NEXT_PUBLIC_API_URL=http://localhost:5002/api
 ```
 
-**Note:** The frontend is configured to use the production backend by default (`https://ijack-server.onrender.com/api`). If you want to use a local backend, create a `.env.local` file with the local URL.
+**Note:** The frontend is configured to use the production backend by default (`https://ijack-server-pbdb.onrender.com/api`). If you want to use a local backend, create a `.env.local` file with the local URL.
 
 4. Run the development server:
 

@@ -51,7 +51,7 @@ export default function ProductCard({ notebook }) {
     if (notebook.image.startsWith("/uploads")) {
       const baseUrl = process.env.NEXT_PUBLIC_API_URL 
         ? process.env.NEXT_PUBLIC_API_URL.replace("/api", "")
-        : "https://ijack-server.onrender.com";
+        : "https://ijack-server-pbdb.onrender.com";
       return `${baseUrl}${notebook.image}`;
     }
     // Otherwise, return as is

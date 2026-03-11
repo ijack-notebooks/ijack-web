@@ -4,7 +4,7 @@ const nextConfig = {
     remotePatterns: [
       {
         protocol: 'https',
-        hostname: 'ijack-server.onrender.com',
+        hostname: 'ijack-server-pbdb.onrender.com',
         pathname: '/uploads/**',
       },
       {
