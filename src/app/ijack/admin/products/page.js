@@ -41,6 +41,9 @@ export default function ProductsList() {
     size: "",
     stockQuantity: "",
     weight: "",
+    lengthCm: "",
+    breadthCm: "",
+    heightCm: "",
     inStock: true,
   });
   const [imageFile, setImageFile] = useState(null);
@@ -55,6 +58,9 @@ export default function ProductsList() {
     size: "",
     stockQuantity: "",
     weight: "",
+    lengthCm: "",
+    breadthCm: "",
+    heightCm: "",
     inStock: true,
   });
   const [editImageFile, setEditImageFile] = useState(null);
@@ -175,6 +181,18 @@ export default function ProductsList() {
       const price = parseFloat(formData.price);
       const pages = parseInt(formData.pages);
       const stockQuantity = parseInt(formData.stockQuantity);
+      const lengthCm =
+        formData.lengthCm !== "" && formData.lengthCm != null
+          ? Number(formData.lengthCm)
+          : 25;
+      const breadthCm =
+        formData.breadthCm !== "" && formData.breadthCm != null
+          ? Number(formData.breadthCm)
+          : 20;
+      const heightCm =
+        formData.heightCm !== "" && formData.heightCm != null
+          ? Number(formData.heightCm)
+          : 0.8;
 
       if (isNaN(price) || price < 0) {
         setError("Please enter a valid price (must be a positive number)");
@@ -186,6 +204,17 @@ export default function ProductsList() {
       }
       if (isNaN(stockQuantity) || stockQuantity < 0) {
         setError("Please enter a valid stock quantity (must be 0 or greater)");
+        return;
+      }
+      if (
+        !Number.isFinite(lengthCm) ||
+        !Number.isFinite(breadthCm) ||
+        !Number.isFinite(heightCm) ||
+        lengthCm < 0.5 ||
+        breadthCm < 0.5 ||
+        heightCm < 0.5
+      ) {
+        setError("Please enter valid dimensions (minimum 0.5 cm each)");
         return;
       }
 
@@ -200,6 +229,9 @@ export default function ProductsList() {
       formDataToSend.append("stockQuantity", stockQuantity.toString());
       const weight = formData.weight !== "" && formData.weight != null ? Math.max(0, Number(formData.weight)) : 0;
       formDataToSend.append("weight", weight.toString());
+      formDataToSend.append("lengthCm", Math.max(0.5, lengthCm).toString());
+      formDataToSend.append("breadthCm", Math.max(0.5, breadthCm).toString());
+      formDataToSend.append("heightCm", Math.max(0.5, heightCm).toString());
       formDataToSend.append("inStock", formData.inStock ? "true" : "false");
 
       if (imageFile) {
@@ -240,6 +272,9 @@ export default function ProductsList() {
         size: "",
         stockQuantity: "",
         weight: "",
+        lengthCm: "",
+        breadthCm: "",
+        heightCm: "",
         inStock: true,
       });
       setImageFile(null);
@@ -279,6 +314,9 @@ export default function ProductsList() {
       stockQuantity:
         product.stockQuantity != null ? String(product.stockQuantity) : "",
       weight: product.weight != null ? String(product.weight) : "",
+      lengthCm: product.lengthCm != null ? String(product.lengthCm) : "",
+      breadthCm: product.breadthCm != null ? String(product.breadthCm) : "",
+      heightCm: product.heightCm != null ? String(product.heightCm) : "",
       inStock: product.inStock !== false,
     });
     setEditImageFile(null);
@@ -296,6 +334,9 @@ export default function ProductsList() {
       size: "",
       stockQuantity: "",
       weight: "",
+      lengthCm: "",
+      breadthCm: "",
+      heightCm: "",
       inStock: true,
     });
     setEditImageFile(null);
@@ -329,6 +370,18 @@ export default function ProductsList() {
     const pages = parseInt(editForm.pages, 10);
     const stockQuantity = parseInt(editForm.stockQuantity, 10);
     const weight = editForm.weight !== "" && editForm.weight != null ? Math.max(0, Number(editForm.weight)) : 0;
+    const lengthCm =
+      editForm.lengthCm !== "" && editForm.lengthCm != null
+        ? Number(editForm.lengthCm)
+        : 25;
+    const breadthCm =
+      editForm.breadthCm !== "" && editForm.breadthCm != null
+        ? Number(editForm.breadthCm)
+        : 20;
+    const heightCm =
+      editForm.heightCm !== "" && editForm.heightCm != null
+        ? Number(editForm.heightCm)
+        : 0.8;
     if (
       !editForm.name?.trim() ||
       !editForm.description?.trim() ||
@@ -351,6 +404,17 @@ export default function ProductsList() {
       setError("Please enter valid price, pages, and stock quantity");
       return;
     }
+    if (
+      !Number.isFinite(lengthCm) ||
+      !Number.isFinite(breadthCm) ||
+      !Number.isFinite(heightCm) ||
+      lengthCm < 0.5 ||
+      breadthCm < 0.5 ||
+      heightCm < 0.5
+    ) {
+      setError("Please enter valid dimensions (minimum 0.5 cm each)");
+      return;
+    }
     try {
       if (editImageFile) {
         const formDataToSend = new FormData();
@@ -362,6 +426,9 @@ export default function ProductsList() {
         formDataToSend.append("size", editForm.size.trim());
         formDataToSend.append("stockQuantity", stockQuantity.toString());
         formDataToSend.append("weight", weight.toString());
+        formDataToSend.append("lengthCm", Math.max(0.5, lengthCm).toString());
+        formDataToSend.append("breadthCm", Math.max(0.5, breadthCm).toString());
+        formDataToSend.append("heightCm", Math.max(0.5, heightCm).toString());
         formDataToSend.append("inStock", editForm.inStock ? "true" : "false");
         formDataToSend.append("image", editImageFile);
 
@@ -394,6 +461,9 @@ export default function ProductsList() {
           size: editForm.size.trim(),
           stockQuantity,
           weight,
+          lengthCm: Math.max(0.5, lengthCm),
+          breadthCm: Math.max(0.5, breadthCm),
+          heightCm: Math.max(0.5, heightCm),
           inStock: editForm.inStock,
         });
       }
@@ -590,6 +660,54 @@ export default function ProductsList() {
                       Optional. Weight of one unit in grams.
                     </p>
                   </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Length (cm per piece)
+                    </label>
+                    <input
+                      type="number"
+                      name="lengthCm"
+                      value={formData.lengthCm}
+                      onChange={handleInputChange}
+                      min="0.5"
+                      step="0.1"
+                      placeholder="e.g., 25"
+                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Breadth (cm per piece)
+                    </label>
+                    <input
+                      type="number"
+                      name="breadthCm"
+                      value={formData.breadthCm}
+                      onChange={handleInputChange}
+                      min="0.5"
+                      step="0.1"
+                      placeholder="e.g., 20"
+                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Height (cm per piece)
+                    </label>
+                    <input
+                      type="number"
+                      name="heightCm"
+                      value={formData.heightCm}
+                      onChange={handleInputChange}
+                      min="0.5"
+                      step="0.1"
+                      placeholder="e.g., 0.8"
+                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">
+                      Used for shipping quote calculation.
+                    </p>
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
@@ -655,6 +773,9 @@ export default function ProductsList() {
                         size: "",
                         stockQuantity: "",
                         weight: "",
+                        lengthCm: "",
+                        breadthCm: "",
+                        heightCm: "",
                         inStock: true,
                       });
                       setImageFile(null);
@@ -795,6 +916,51 @@ export default function ProductsList() {
                           min="0"
                           step="1"
                           placeholder="e.g., 250"
+                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                          Length (cm per piece)
+                        </label>
+                        <input
+                          type="number"
+                          name="lengthCm"
+                          value={editForm.lengthCm}
+                          onChange={handleEditInputChange}
+                          min="0.5"
+                          step="0.1"
+                          placeholder="e.g., 25"
+                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                          Breadth (cm per piece)
+                        </label>
+                        <input
+                          type="number"
+                          name="breadthCm"
+                          value={editForm.breadthCm}
+                          onChange={handleEditInputChange}
+                          min="0.5"
+                          step="0.1"
+                          placeholder="e.g., 20"
+                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                          Height (cm per piece)
+                        </label>
+                        <input
+                          type="number"
+                          name="heightCm"
+                          value={editForm.heightCm}
+                          onChange={handleEditInputChange}
+                          min="0.5"
+                          step="0.1"
+                          placeholder="e.g., 0.8"
                           className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
                       </div>

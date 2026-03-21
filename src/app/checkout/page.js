@@ -9,7 +9,7 @@ import api from "../../lib/api";
 import Navbar from "../../components/Navbar";
 import { formatPrice } from "../../lib/currency";
 
-// Shipping: Rs 26 per 500 grams
+// Fallback shipping when live courier rates are unavailable.
 const SHIPPING_PER_500G = 26;
 
 export default function Checkout() {
@@ -36,6 +36,10 @@ export default function Checkout() {
   const [appliedPromo, setAppliedPromo] = useState(null);
   const [promoLoading, setPromoLoading] = useState(false);
   const [availablePromos, setAvailablePromos] = useState([]);
+  const [shippingOptions, setShippingOptions] = useState([]);
+  const [selectedShippingOption, setSelectedShippingOption] = useState(null);
+  const [shippingLoading, setShippingLoading] = useState(false);
+  const [shippingError, setShippingError] = useState("");
 
   const loadLayerScript = useCallback((layerScriptUrl) => {
     return new Promise((resolve, reject) => {
@@ -179,6 +183,67 @@ export default function Checkout() {
     setPromoError("");
   }, [cartKey]);
 
+  useEffect(() => {
+    const normalizedDeliveryPincode = String(formData.zipCode || "").replace(/\D/g, "").slice(0, 6);
+    const shipmentValue = cart.reduce(
+      (sum, item) => sum + (Number(item.notebook?.price) || 0) * (Number(item.quantity) || 0),
+      0
+    );
+    if (!user || cart.length === 0 || normalizedDeliveryPincode.length !== 6) {
+      setShippingOptions([]);
+      setSelectedShippingOption(null);
+      setShippingError("");
+      return;
+    }
+
+    let active = true;
+    setShippingLoading(true);
+    setShippingError("");
+
+    api
+      .post("/payment/shipping-options", {
+        items: cart.map((item) => ({
+          notebookId: item.notebookId,
+          quantity: item.quantity,
+        })),
+        deliveryPincode: normalizedDeliveryPincode,
+        shipmentValue: Math.round(shipmentValue),
+      })
+      .then((res) => {
+        if (!active) return;
+        const options = Array.isArray(res.data?.options) ? res.data.options : [];
+        setShippingOptions(options);
+        if (!options.length) {
+          setSelectedShippingOption(null);
+          setShippingError("No courier options available for this pincode right now.");
+          return;
+        }
+        setSelectedShippingOption((prev) => {
+          if (!prev) return options[0];
+          return (
+            options.find((opt) => opt.courierCompanyId === prev.courierCompanyId) ||
+            options[0]
+          );
+        });
+      })
+      .catch((err) => {
+        if (!active) return;
+        setShippingOptions([]);
+        setSelectedShippingOption(null);
+        setShippingError(
+          err.response?.data?.message ||
+            "Unable to fetch live shipping rates. Fallback shipping will be used."
+        );
+      })
+      .finally(() => {
+        if (active) setShippingLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [cart, cartKey, formData.zipCode, user]);
+
   // Update form data when user changes
   useEffect(() => {
     if (user && (!formData.name || !formData.email)) {
@@ -198,14 +263,18 @@ export default function Checkout() {
     );
   }, [categories]);
 
-  // Order totals: subtotal, shipping (Rs 26 per 500g), GST by category, total before/after discount
-  const { subtotal, shippingCharge, gstAmount, totalBeforeDiscount, total, discountAmount } = useMemo(() => {
+  // Order totals: subtotal, shipping (selected courier or fallback), GST by category, total before/after discount
+  const { subtotal, shippingCharge, fallbackShippingCharge, gstAmount, totalBeforeDiscount, total, discountAmount } = useMemo(() => {
     const sub = getTotalPrice();
     const totalWeightGrams = cart.reduce(
       (sum, item) => sum + (item.notebook?.weight ?? 0) * item.quantity,
       0
     );
-    const shipping = Math.ceil(totalWeightGrams / 500) * SHIPPING_PER_500G;
+    const fallbackShipping = Math.ceil(totalWeightGrams / 500) * SHIPPING_PER_500G;
+    const shipping =
+      selectedShippingOption && Number.isFinite(Number(selectedShippingOption.rate))
+        ? Number(selectedShippingOption.rate)
+        : fallbackShipping;
     const gst = cart.reduce((sum, item) => {
       const itemTotal = (item.notebook?.price ?? 0) * item.quantity;
       const gstPct = gstByCategory[item.notebook?.category ?? ""] ?? 0;
@@ -216,12 +285,13 @@ export default function Checkout() {
     return {
       subtotal: sub,
       shippingCharge: shipping,
+      fallbackShippingCharge: fallbackShipping,
       gstAmount: Math.round(gst),
       totalBeforeDiscount: beforeDiscount,
       discountAmount: discount,
       total: Math.max(0, beforeDiscount - discount),
     };
-  }, [cart, getTotalPrice, gstByCategory, appliedPromo?.discountAmount]);
+  }, [cart, getTotalPrice, gstByCategory, selectedShippingOption, appliedPromo?.discountAmount]);
 
   // Show loading state while checking auth
   if (authLoading) {
@@ -328,6 +398,12 @@ export default function Checkout() {
     setLoading(true);
 
     try {
+      if (shippingOptions.length > 0 && !selectedShippingOption) {
+        setError("Please select a courier option before placing the order.");
+        setLoading(false);
+        return;
+      }
+
       const orderData = {
         items: cart.map((item) => ({
           notebookId: item.notebookId,
@@ -346,6 +422,14 @@ export default function Checkout() {
           zipCode: formData.zipCode,
           country: formData.country,
         },
+        shippingOption: selectedShippingOption
+          ? {
+              courierCompanyId: selectedShippingOption.courierCompanyId,
+              courierName: selectedShippingOption.courierName,
+              rate: selectedShippingOption.rate,
+              etdDays: selectedShippingOption.etdDays,
+            }
+          : undefined,
       };
 
       const paymentResponse = await api.post("/payment/initiate", orderData);
@@ -513,6 +597,63 @@ export default function Checkout() {
                   </div>
                 </div>
 
+                <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+                  <h2 className="text-xl font-semibold text-white mb-2">
+                    Shipping Options
+                  </h2>
+                  <p className="text-sm text-gray-400 mb-4">
+                    Live courier rates are fetched from Shiprocket based on delivery pincode, weight, and package dimensions.
+                  </p>
+                  {shippingLoading ? (
+                    <p className="text-sm text-gray-300">Fetching courier options...</p>
+                  ) : shippingOptions.length > 0 ? (
+                    <div className="space-y-2">
+                      {shippingOptions.map((opt) => {
+                        const isSelected =
+                          selectedShippingOption?.courierCompanyId === opt.courierCompanyId;
+                        return (
+                          <label
+                            key={`${opt.courierCompanyId}-${opt.courierName}`}
+                            className={`flex items-center justify-between gap-3 rounded-md border px-3 py-2 cursor-pointer ${
+                              isSelected
+                                ? "border-blue-500 bg-blue-900/20"
+                                : "border-gray-600 bg-gray-700/40"
+                            }`}
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <input
+                                type="radio"
+                                name="shippingOption"
+                                checked={isSelected}
+                                onChange={() => setSelectedShippingOption(opt)}
+                                className="accent-blue-500"
+                              />
+                              <div className="min-w-0">
+                                <p className="text-sm text-white font-medium truncate">
+                                  {opt.courierName}
+                                </p>
+                                {opt.etdDays && (
+                                  <p className="text-xs text-gray-400">
+                                    ETA: {opt.etdDays} days
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                            <span className="text-sm font-semibold text-blue-300">
+                              {formatPrice(Number(opt.rate) || 0)}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-300">
+                      {shippingError ||
+                        "Enter a valid 6-digit pincode to see available courier options."}
+                    </p>
+                  )}
+                </div>
+
                 <p className="text-gray-400 text-xs">
                   By placing your order you agree to our{" "}
                   <Link href="/shipping" className="text-blue-400 hover:underline">Shipping Policy</Link>,{" "}
@@ -635,9 +776,19 @@ export default function Checkout() {
                     <span className="text-white">{formatPrice(subtotal)}</span>
                   </div>
                   <div className="flex justify-between text-sm text-gray-400">
-                    <span>Shipping (Rs 26 per 500g)</span>
+                    <span>
+                      Shipping{" "}
+                      {selectedShippingOption?.courierName
+                        ? `(${selectedShippingOption.courierName})`
+                        : "(Fallback)"}
+                    </span>
                     <span className="text-white">{formatPrice(shippingCharge)}</span>
                   </div>
+                  {!selectedShippingOption && (
+                    <div className="text-xs text-gray-500">
+                      Fallback estimate: {formatPrice(fallbackShippingCharge)} (Rs 26 per 500g)
+                    </div>
+                  )}
                   <div className="flex justify-between text-sm text-gray-400">
                     <span>GST</span>
                     <span className="text-white">{formatPrice(gstAmount)}</span>
