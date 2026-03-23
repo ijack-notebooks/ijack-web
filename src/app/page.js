@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Navbar from "../components/Navbar";
+import OfferCrawl from "../components/OfferCrawl";
 import { useAuth } from "../contexts/AuthContext";
 
 export default function Home() {
@@ -21,6 +22,7 @@ export default function Home() {
     return (
       <>
         <Navbar />
+        <OfferCrawl />
         <main className="min-h-screen bg-gray-900 flex items-center justify-center">
           <div className="text-white text-xl">Loading...</div>
         </main>
@@ -32,6 +34,7 @@ export default function Home() {
     return (
       <>
         <Navbar />
+        <OfferCrawl />
         <main className="min-h-screen bg-gray-900 flex items-center justify-center">
           <div className="text-gray-400 text-lg">Redirecting to homepage...</div>
         </main>
@@ -42,6 +45,7 @@ export default function Home() {
   return (
     <>
       <Navbar />
+      <OfferCrawl />
       <main className="min-h-screen">
         {/* Hero Section */}
         <section className="bg-gradient-to-br from-gray-800 via-gray-900 to-black py-20">
