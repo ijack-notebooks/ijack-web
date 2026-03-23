@@ -18,6 +18,7 @@ export default function Orders() {
   const [trackingData, setTrackingData] = useState(null);
   const [trackingLoading, setTrackingLoading] = useState(false);
   const [trackingError, setTrackingError] = useState("");
+  const [invoiceLoadingByOrder, setInvoiceLoadingByOrder] = useState({});
 
   const getTrackingUrl = (order) => order?.shiprocket?.trackingUrl || null;
 
@@ -74,6 +75,33 @@ export default function Orders() {
     return () => clearInterval(intervalId);
   }, [user, authLoading, fetchOrders]);
 
+  const computeOrderSummary = useCallback((order) => {
+    const subtotal = (order.items || []).reduce(
+      (sum, item) => sum + (Number(item.price) || 0) * (Number(item.quantity) || 0),
+      0
+    );
+    const discountAmount = Math.max(0, Number(order.discountAmount) || 0);
+    const discountedSubtotal = Math.max(0, subtotal - discountAmount);
+    const shippingCharge = Math.max(0, Number(order.shipping?.charge) || 0);
+    const total = Number(order.totalAmount) || 0;
+    const gstAmount = Math.max(0, total - discountedSubtotal - shippingCharge);
+    return { subtotal, discountAmount, discountedSubtotal, shippingCharge, gstAmount, total };
+  }, []);
+
+  const handleDownloadInvoice = useCallback(async (orderId) => {
+    setInvoiceLoadingByOrder((prev) => ({ ...prev, [orderId]: true }));
+    try {
+      const res = await api.get(`/orders/${orderId}/invoice`);
+      const url = res.data?.url;
+      if (!url) throw new Error("Invoice URL not available");
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      alert(err.response?.data?.message || err.message || "Failed to download invoice");
+    } finally {
+      setInvoiceLoadingByOrder((prev) => ({ ...prev, [orderId]: false }));
+    }
+  }, []);
+
   if (authLoading || loading) {
     return (
       <>
@@ -124,7 +152,9 @@ export default function Orders() {
             </div>
           ) : (
             <div className="space-y-6">
-              {orders.map((order) => (
+              {orders.map((order) => {
+                const summary = computeOrderSummary(order);
+                return (
                 <div
                   key={order._id}
                   className="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden hover:border-gray-600 transition-all shadow-lg"
@@ -207,43 +237,83 @@ export default function Orders() {
                       </div>
                     </div>
 
-                    <div className="border-t border-gray-700 mt-6 pt-6 flex flex-wrap justify-between items-center gap-4">
-                      <div className="text-gray-400 text-sm">
-                        Ordered by <span className="text-gray-300 font-medium">{order.contactDetails?.name}</span>
+                    <div className="border-t border-gray-700 mt-6 pt-6 grid md:grid-cols-2 gap-6">
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between text-gray-400">
+                          <span>Subtotal {summary.discountAmount > 0 ? "(after discount)" : ""}</span>
+                          <span className="text-white">{formatPrice(summary.discountedSubtotal)}</span>
+                        </div>
+                        {summary.discountAmount > 0 && (
+                          <>
+                            <div className="flex justify-between text-xs text-gray-500">
+                              <span>Original subtotal</span>
+                              <span className="line-through">{formatPrice(summary.subtotal)}</span>
+                            </div>
+                            <div className="flex justify-between text-xs text-green-400">
+                              <span>You saved</span>
+                              <span>{formatPrice(summary.discountAmount)}</span>
+                            </div>
+                          </>
+                        )}
+                        <div className="flex justify-between text-gray-400">
+                          <span>Shipping</span>
+                          <span className="text-white">{formatPrice(summary.shippingCharge)}</span>
+                        </div>
+                        <div className="flex justify-between text-gray-400">
+                          <span>GST</span>
+                          <span className="text-white">{formatPrice(summary.gstAmount)}</span>
+                        </div>
+                        <div className="flex justify-between text-base font-bold pt-2 border-t border-gray-700">
+                          <span className="text-white">Total</span>
+                          <span className="text-blue-400">{formatPrice(summary.total)}</span>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-3 flex-wrap">
-                        {order.shiprocket?.awbCode && (
-                          <button
-                            type="button"
-                            onClick={() => openTrackingModal(order)}
-                            className="text-sm text-cyan-400 hover:text-cyan-300 font-medium underline"
-                          >
-                            View tracking
-                          </button>
-                        )}
-                        {getTrackingUrl(order) && (
-                          <a
-                            href={getTrackingUrl(order)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-sm text-gray-400 hover:text-gray-300"
-                          >
-                            Open courier link
-                          </a>
-                        )}
-                        {order.shiprocket?.awbCode && !getTrackingUrl(order) && (
-                          <span className="text-sm text-gray-400">
-                            Live tracking in modal; courier link after first scan.
-                          </span>
-                        )}
-                        <div className="text-xl font-bold text-blue-400">
-                          Total: {formatPrice(order.totalAmount)}
+
+                      <div className="flex flex-col gap-3 justify-between">
+                        <div className="text-gray-400 text-sm">
+                          Ordered by <span className="text-gray-300 font-medium">{order.contactDetails?.name}</span>
+                        </div>
+                        <div className="flex items-center gap-3 flex-wrap">
+                          {order.shiprocket?.awbCode && (
+                            <button
+                              type="button"
+                              onClick={() => openTrackingModal(order)}
+                              className="text-sm text-cyan-400 hover:text-cyan-300 font-medium underline"
+                            >
+                              View tracking
+                            </button>
+                          )}
+                          {getTrackingUrl(order) && (
+                            <a
+                              href={getTrackingUrl(order)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-sm text-gray-400 hover:text-gray-300"
+                            >
+                              Open courier link
+                            </a>
+                          )}
+                          {order.shiprocket?.awbCode && !getTrackingUrl(order) && (
+                            <span className="text-sm text-gray-400">
+                              Live tracking in modal; courier link after first scan.
+                            </span>
+                          )}
+                          {order.payment?.paymentStatus === "SUCCESS" && (
+                            <button
+                              type="button"
+                              onClick={() => handleDownloadInvoice(order._id)}
+                              disabled={Boolean(invoiceLoadingByOrder[order._id])}
+                              className="text-sm bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                            >
+                              {invoiceLoadingByOrder[order._id] ? "Loading invoice..." : "Download Invoice"}
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>
                   </div>
                 </div>
-              ))}
+              )})}
             </div>
           )}
 

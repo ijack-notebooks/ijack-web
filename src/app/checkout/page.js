@@ -41,7 +41,13 @@ export default function Checkout() {
   const [shippingLoading, setShippingLoading] = useState(false);
   const [shippingError, setShippingError] = useState("");
   const normalizedDeliveryPincode = String(formData.zipCode || "").replace(/\D/g, "").slice(0, 6);
-  const hasPincodeInput = normalizedDeliveryPincode.length > 0;
+  const hasAddressForShipping = Boolean(
+    String(formData.street || "").trim() &&
+      String(formData.city || "").trim() &&
+      String(formData.state || "").trim() &&
+      String(formData.country || "").trim() &&
+      normalizedDeliveryPincode.length === 6
+  );
 
   const buildPromoValidationItems = useCallback(() => {
     return cart.map((item) => ({
@@ -200,7 +206,7 @@ export default function Checkout() {
     );
     // Shipment value for rate quotes should be after promo discount.
     const shipmentValue = Math.max(0, Math.round(rawSubtotal - (appliedPromo?.discountAmount || 0)));
-    if (!user || cart.length === 0 || normalizedDeliveryPincode.length !== 6) {
+    if (!user || cart.length === 0 || !hasAddressForShipping) {
       setShippingOptions([]);
       setSelectedShippingOption(null);
       setShippingError("");
@@ -257,7 +263,7 @@ export default function Checkout() {
     return () => {
       active = false;
     };
-  }, [cart, cartKey, normalizedDeliveryPincode, user, appliedPromo?.discountAmount]);
+  }, [cart, cartKey, normalizedDeliveryPincode, user, appliedPromo?.discountAmount, hasAddressForShipping]);
 
   // Update form data when user changes
   useEffect(() => {
@@ -290,6 +296,8 @@ export default function Checkout() {
     total,
     discountAmount
   } = useMemo(() => {
+    const roundTo2 = (value) =>
+      Math.round((Number(value) + Number.EPSILON) * 100) / 100;
     const sub = getTotalPrice();
     const totalWeightGrams = cart.reduce(
       (sum, item) => sum + (item.notebook?.weight ?? 0) * item.quantity,
@@ -300,7 +308,7 @@ export default function Checkout() {
       selectedShippingOption && Number.isFinite(Number(selectedShippingOption.rate))
         ? Number(selectedShippingOption.rate)
         : fallbackShipping;
-    const shipping = hasPincodeInput ? computedShipping : 0;
+    const shipping = hasAddressForShipping ? computedShipping : 0;
     const gstOnOriginalSubtotal = cart.reduce((sum, item) => {
       const itemTotal = (item.notebook?.price ?? 0) * item.quantity;
       const gstPct = gstByCategory[item.notebook?.category ?? ""] ?? 0;
@@ -309,20 +317,24 @@ export default function Checkout() {
     const discount = appliedPromo?.discountAmount ?? 0;
     const discountedSub = Math.max(0, sub - discount);
     const discountRatio = sub > 0 ? discountedSub / sub : 1;
-    const gst = gstOnOriginalSubtotal * discountRatio;
-    const beforeDiscount = Math.round(discountedSub + shipping + gst);
+    const gstOnDiscountedProducts = gstOnOriginalSubtotal * discountRatio;
+    // Apply the same effective GST rate to shipping so GST = GST(products after discount + shipping).
+    const effectiveGstRate = sub > 0 ? gstOnOriginalSubtotal / sub : 0;
+    const gstOnShipping = shipping * effectiveGstRate;
+    const gst = roundTo2(gstOnDiscountedProducts + gstOnShipping);
+    const beforeDiscount = roundTo2(discountedSub + shipping + gst);
     return {
-      subtotal: sub,
-      discountedSubtotal: discountedSub,
-      shippingCharge: shipping,
-      fallbackShippingCharge: fallbackShipping,
-      shippingIncluded: hasPincodeInput,
-      gstAmount: Math.round(gst),
+      subtotal: roundTo2(sub),
+      discountedSubtotal: roundTo2(discountedSub),
+      shippingCharge: roundTo2(shipping),
+      fallbackShippingCharge: roundTo2(fallbackShipping),
+      shippingIncluded: hasAddressForShipping,
+      gstAmount: gst,
       totalBeforeDiscount: beforeDiscount,
-      discountAmount: discount,
+      discountAmount: roundTo2(discount),
       total: beforeDiscount,
     };
-  }, [cart, getTotalPrice, gstByCategory, selectedShippingOption, appliedPromo?.discountAmount, hasPincodeInput]);
+  }, [cart, getTotalPrice, gstByCategory, selectedShippingOption, appliedPromo?.discountAmount, hasAddressForShipping]);
 
   // Show loading state while checking auth
   if (authLoading) {
@@ -739,7 +751,7 @@ export default function Checkout() {
                   ) : (
                     <p className="text-sm text-gray-300">
                       {shippingError ||
-                        "Enter a valid 6-digit pincode to see available courier options."}
+                        "Shipping charges are added after address is provided."}
                     </p>
                   )}
                 </div>
@@ -909,9 +921,22 @@ export default function Checkout() {
                 )}
                 <div className="border-t border-gray-700 pt-4 space-y-2">
                   <div className="flex justify-between text-sm text-gray-400">
-                    <span>Subtotal</span>
-                    <span className="text-white">{formatPrice(subtotal)}</span>
+                    <span>Subtotal {appliedPromo ? "(after discount)" : ""}</span>
+                    <div className="text-right">
+                      <span className="text-white">{formatPrice(discountedSubtotal)}</span>
+                      {appliedPromo && (
+                        <p className="text-xs text-gray-500 line-through">
+                          {formatPrice(subtotal)}
+                        </p>
+                      )}
+                    </div>
                   </div>
+                  {appliedPromo && (
+                    <div className="flex justify-between text-xs text-green-400">
+                      <span>You saved ({appliedPromo.code})</span>
+                      <span>{formatPrice(appliedPromo.discountAmount)}</span>
+                    </div>
+                  )}
                   {shippingIncluded ? (
                     <>
                       <div className="flex justify-between text-sm text-gray-400">
@@ -931,19 +956,13 @@ export default function Checkout() {
                     </>
                   ) : (
                     <div className="text-xs text-gray-500">
-                      Enter delivery pincode to calculate shipping charges.
+                      Shipping charges are added after address is provided.
                     </div>
                   )}
                   <div className="flex justify-between text-sm text-gray-400">
                     <span>GST</span>
                     <span className="text-white">{formatPrice(gstAmount)}</span>
                   </div>
-                  {appliedPromo && (
-                    <div className="flex justify-between text-sm text-green-400">
-                      <span>Discount ({appliedPromo.code})</span>
-                      <span>−{formatPrice(appliedPromo.discountAmount)}</span>
-                    </div>
-                  )}
                   <div className="flex justify-between text-lg font-bold pt-2 border-t border-gray-600">
                     <span className="text-white">
                       {shippingIncluded ? "Total" : "Total (without shipping)"}
