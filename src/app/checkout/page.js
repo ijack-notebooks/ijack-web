@@ -185,10 +185,12 @@ export default function Checkout() {
 
   useEffect(() => {
     const normalizedDeliveryPincode = String(formData.zipCode || "").replace(/\D/g, "").slice(0, 6);
-    const shipmentValue = cart.reduce(
+    const rawSubtotal = cart.reduce(
       (sum, item) => sum + (Number(item.notebook?.price) || 0) * (Number(item.quantity) || 0),
       0
     );
+    // Shipment value for rate quotes should be after promo discount.
+    const shipmentValue = Math.max(0, Math.round(rawSubtotal - (appliedPromo?.discountAmount || 0)));
     if (!user || cart.length === 0 || normalizedDeliveryPincode.length !== 6) {
       setShippingOptions([]);
       setSelectedShippingOption(null);
@@ -200,18 +202,53 @@ export default function Checkout() {
     setShippingLoading(true);
     setShippingError("");
 
+    const shippingRequestBody = {
+      items: cart.map((item) => ({
+        notebookId: item.notebookId,
+        quantity: item.quantity,
+      })),
+      deliveryPincode: normalizedDeliveryPincode,
+      shipmentValue: Math.round(shipmentValue),
+    };
+
+    // Debug: our API then calls Shiprocket GET /v1/external/courier/serviceability/ with these query params (when Shiprocket is configured).
+    console.log("[Ijack Shipping] Request → POST /payment/shipping-options", shippingRequestBody);
+
     api
-      .post("/payment/shipping-options", {
-        items: cart.map((item) => ({
-          notebookId: item.notebookId,
-          quantity: item.quantity,
-        })),
-        deliveryPincode: normalizedDeliveryPincode,
-        shipmentValue: Math.round(shipmentValue),
-      })
+      .post("/payment/shipping-options", shippingRequestBody)
       .then((res) => {
         if (!active) return;
-        const options = Array.isArray(res.data?.options) ? res.data.options : [];
+        const data = res.data || {};
+        const pkg = data.package;
+        const declaredValue = Math.max(0, Math.round(shipmentValue));
+        if (pkg && data.pickupPincode && data.deliveryPincode) {
+          const shiprocketServiceability = {
+            method: "GET",
+            path: "/v1/external/courier/serviceability/",
+            baseUrl: "https://apiv2.shiprocket.in",
+            queryParams: {
+              pickup_postcode: String(data.pickupPincode),
+              delivery_postcode: String(data.deliveryPincode),
+              weight: String(pkg.weightKg),
+              cod: "0",
+              length: String(pkg.lengthCm),
+              breadth: String(pkg.breadthCm),
+              height: String(pkg.heightCm),
+              declared_value: String(declaredValue),
+            },
+            note:
+              data.fallback === true
+                ? "Fallback mode: Shiprocket not configured on server — query shows what would be sent."
+                : "Server uses these params for Shiprocket serviceability (shipping cost).",
+          };
+          console.log(
+            "[Ijack Shipping] Shiprocket serviceability (same values server sends when configured):",
+            shiprocketServiceability
+          );
+        }
+        console.log("[Ijack Shipping] Response from /payment/shipping-options", data);
+
+        const options = Array.isArray(data?.options) ? data.options : [];
         setShippingOptions(options);
         if (!options.length) {
           setSelectedShippingOption(null);
@@ -228,6 +265,12 @@ export default function Checkout() {
       })
       .catch((err) => {
         if (!active) return;
+        console.error("[Ijack Shipping] /payment/shipping-options failed", {
+          message: err.message,
+          status: err.response?.status,
+          data: err.response?.data,
+          requestBody: shippingRequestBody,
+        });
         setShippingOptions([]);
         setSelectedShippingOption(null);
         setShippingError(
@@ -242,7 +285,7 @@ export default function Checkout() {
     return () => {
       active = false;
     };
-  }, [cart, cartKey, formData.zipCode, user]);
+  }, [cart, cartKey, formData.zipCode, user, appliedPromo?.discountAmount]);
 
   // Update form data when user changes
   useEffect(() => {
@@ -263,8 +306,17 @@ export default function Checkout() {
     );
   }, [categories]);
 
-  // Order totals: subtotal, shipping (selected courier or fallback), GST by category, total before/after discount
-  const { subtotal, shippingCharge, fallbackShippingCharge, gstAmount, totalBeforeDiscount, total, discountAmount } = useMemo(() => {
+  // Order totals: discount first, then GST + shipping on discounted value.
+  const {
+    subtotal,
+    discountedSubtotal,
+    shippingCharge,
+    fallbackShippingCharge,
+    gstAmount,
+    totalBeforeDiscount,
+    total,
+    discountAmount
+  } = useMemo(() => {
     const sub = getTotalPrice();
     const totalWeightGrams = cart.reduce(
       (sum, item) => sum + (item.notebook?.weight ?? 0) * item.quantity,
@@ -275,21 +327,25 @@ export default function Checkout() {
       selectedShippingOption && Number.isFinite(Number(selectedShippingOption.rate))
         ? Number(selectedShippingOption.rate)
         : fallbackShipping;
-    const gst = cart.reduce((sum, item) => {
+    const gstOnOriginalSubtotal = cart.reduce((sum, item) => {
       const itemTotal = (item.notebook?.price ?? 0) * item.quantity;
       const gstPct = gstByCategory[item.notebook?.category ?? ""] ?? 0;
       return sum + (itemTotal * gstPct) / 100;
     }, 0);
-    const beforeDiscount = Math.round(sub + shipping + gst);
     const discount = appliedPromo?.discountAmount ?? 0;
+    const discountedSub = Math.max(0, sub - discount);
+    const discountRatio = sub > 0 ? discountedSub / sub : 1;
+    const gst = gstOnOriginalSubtotal * discountRatio;
+    const beforeDiscount = Math.round(discountedSub + shipping + gst);
     return {
       subtotal: sub,
+      discountedSubtotal: discountedSub,
       shippingCharge: shipping,
       fallbackShippingCharge: fallbackShipping,
       gstAmount: Math.round(gst),
       totalBeforeDiscount: beforeDiscount,
       discountAmount: discount,
-      total: Math.max(0, beforeDiscount - discount),
+      total: beforeDiscount,
     };
   }, [cart, getTotalPrice, gstByCategory, selectedShippingOption, appliedPromo?.discountAmount]);
 
@@ -335,7 +391,7 @@ export default function Checkout() {
     try {
       const res = await api.post("/promo-codes/validate", {
         code,
-        amount: totalBeforeDiscount,
+        amount: subtotal,
       });
       const data = res.data;
       if (data.valid) {
@@ -365,7 +421,7 @@ export default function Checkout() {
     setAppliedPromo(null);
     setPromoLoading(true);
     api
-      .post("/promo-codes/validate", { code, amount: totalBeforeDiscount })
+      .post("/promo-codes/validate", { code, amount: subtotal })
       .then((res) => {
         const data = res.data;
         if (data.valid) {

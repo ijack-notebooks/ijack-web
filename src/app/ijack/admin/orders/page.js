@@ -624,6 +624,27 @@ export default function AllOrders() {
                   </div>
                 )}
 
+                {selectedOrder.shipping && (
+                  <div>
+                    <p className="text-gray-400 text-sm mb-3">Shipping selection at checkout</p>
+                    <div className="bg-gray-700 rounded-lg p-4 space-y-2">
+                      <p className="text-white text-sm">
+                        <span className="text-gray-400">Preferred courier:</span>{" "}
+                        {selectedOrder.shipping.courierName ||
+                          (selectedOrder.shipping.courierCompanyId
+                            ? `Courier #${selectedOrder.shipping.courierCompanyId}`
+                            : "Auto-select")}
+                      </p>
+                      <p className="text-white text-sm">
+                        <span className="text-gray-400">Quoted shipping charge:</span>{" "}
+                        {selectedOrder.shipping.charge != null
+                          ? formatPrice(selectedOrder.shipping.charge)
+                          : "—"}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 <div>
                   <p className="text-gray-400 text-sm mb-2">Order Status</p>
                   <div className="flex gap-2 flex-wrap">

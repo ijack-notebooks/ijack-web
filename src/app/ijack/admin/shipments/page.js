@@ -301,7 +301,13 @@ function ShipmentsContent() {
                     </div>
                     <div>
                       <p className="text-gray-400">Courier</p>
-                      <p className="text-white">{selectedOrder.shiprocket?.courierName ?? "—"}</p>
+                      <p className="text-white">
+                        {selectedOrder.shiprocket?.courierName ||
+                          selectedOrder.shipping?.courierName ||
+                          (selectedOrder.shipping?.courierCompanyId
+                            ? `Courier #${selectedOrder.shipping.courierCompanyId}`
+                            : "—")}
+                      </p>
                     </div>
                     <div>
                       <p className="text-gray-400">Live status</p>
