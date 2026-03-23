@@ -9,6 +9,7 @@ const DEFAULT_BUY_GET_PROMOS = [
   { code: "BUY5GET2", buyQty: 5, getQty: 2 },
   { code: "BUY10GET5", buyQty: 10, getQty: 5 },
 ];
+const PROTECTED_PROMO_CODES = new Set(DEFAULT_BUY_GET_PROMOS.map((p) => p.code));
 
 export default function AdminPromoCodes() {
   const { admin } = useAdminAuth();
@@ -141,6 +142,12 @@ export default function AdminPromoCodes() {
   };
 
   const handleDelete = async (id) => {
+    const promo = codes.find((c) => c._id === id);
+    const code = String(promo?.code || "").toUpperCase();
+    if (PROTECTED_PROMO_CODES.has(code)) {
+      setMessage({ type: "error", text: `${code} is protected and cannot be deleted.` });
+      return;
+    }
     if (!confirm("Delete this promo code? This cannot be undone.")) return;
     try {
       await api.delete(`/admin/promo-codes/${id}`);
@@ -387,6 +394,11 @@ export default function AdminPromoCodes() {
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
+                        {PROTECTED_PROMO_CODES.has(String(promo.code || "").toUpperCase()) && (
+                          <span className="inline-flex items-center px-2 py-0.5 mr-3 rounded text-xs font-medium bg-amber-900/40 text-amber-300 border border-amber-700/60">
+                            Protected
+                          </span>
+                        )}
                         <button
                           type="button"
                           onClick={() => handleToggleActive(promo._id, promo.active)}
@@ -397,7 +409,12 @@ export default function AdminPromoCodes() {
                         <button
                           type="button"
                           onClick={() => handleDelete(promo._id)}
-                          className="text-red-400 hover:text-red-300 font-medium"
+                          disabled={PROTECTED_PROMO_CODES.has(String(promo.code || "").toUpperCase())}
+                          className={`font-medium ${
+                            PROTECTED_PROMO_CODES.has(String(promo.code || "").toUpperCase())
+                              ? "text-gray-500 cursor-not-allowed"
+                              : "text-red-400 hover:text-red-300"
+                          }`}
                         >
                           Delete
                         </button>
