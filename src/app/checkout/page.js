@@ -220,42 +220,11 @@ export default function Checkout() {
       shipmentValue: Math.round(shipmentValue),
     };
 
-    // Debug: our API then calls Shiprocket GET /v1/external/courier/serviceability/ with these query params (when Shiprocket is configured).
-    console.log("[Ijack Shipping] Request → POST /payment/shipping-options", shippingRequestBody);
-
     api
       .post("/payment/shipping-options", shippingRequestBody)
       .then((res) => {
         if (!active) return;
         const data = res.data || {};
-        const pkg = data.package;
-        const declaredValue = Math.max(0, Math.round(shipmentValue));
-        if (pkg && data.pickupPincode && data.deliveryPincode) {
-          const shiprocketServiceability = {
-            method: "GET",
-            path: "/v1/external/courier/serviceability/",
-            baseUrl: "https://apiv2.shiprocket.in",
-            queryParams: {
-              pickup_postcode: String(data.pickupPincode),
-              delivery_postcode: String(data.deliveryPincode),
-              weight: String(pkg.weightKg),
-              cod: "0",
-              length: String(pkg.lengthCm),
-              breadth: String(pkg.breadthCm),
-              height: String(pkg.heightCm),
-              declared_value: String(declaredValue),
-            },
-            note:
-              data.fallback === true
-                ? "Fallback mode: Shiprocket not configured on server — query shows what would be sent."
-                : "Server uses these params for Shiprocket serviceability (shipping cost).",
-          };
-          console.log(
-            "[Ijack Shipping] Shiprocket serviceability (same values server sends when configured):",
-            shiprocketServiceability
-          );
-        }
-        console.log("[Ijack Shipping] Response from /payment/shipping-options", data);
 
         const options = Array.isArray(data?.options) ? data.options : [];
         setShippingOptions(options);
@@ -274,12 +243,6 @@ export default function Checkout() {
       })
       .catch((err) => {
         if (!active) return;
-        console.error("[Ijack Shipping] /payment/shipping-options failed", {
-          message: err.message,
-          status: err.response?.status,
-          data: err.response?.data,
-          requestBody: shippingRequestBody,
-        });
         setShippingOptions([]);
         setSelectedShippingOption(null);
         setShippingError(
