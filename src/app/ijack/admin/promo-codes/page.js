@@ -1,8 +1,14 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useAdminAuth } from "../../../../contexts/AdminAuthContext";
 import api from "../../../../lib/api";
+
+const DEFAULT_BUY_GET_PROMOS = [
+  { code: "BUY3GET1", buyQty: 3, getQty: 1 },
+  { code: "BUY5GET2", buyQty: 5, getQty: 2 },
+  { code: "BUY10GET5", buyQty: 10, getQty: 5 },
+];
 
 export default function AdminPromoCodes() {
   const { admin } = useAdminAuth();
@@ -15,11 +21,15 @@ export default function AdminPromoCodes() {
     code: "",
     type: "percent",
     value: "",
+    buyQty: "",
+    getQty: "",
     minOrderAmount: "",
     validFrom: "",
     validUntil: "",
     maxUses: "",
   });
+  const [seedingDefaults, setSeedingDefaults] = useState(false);
+  const defaultsSeededRef = useRef(false);
 
   const fetchCodes = useCallback(async () => {
     try {
@@ -38,6 +48,49 @@ export default function AdminPromoCodes() {
     if (admin) fetchCodes();
   }, [admin, fetchCodes]);
 
+  const seedDefaultBuyGetPromos = useCallback(async () => {
+    setSeedingDefaults(true);
+    setMessage({ type: "", text: "" });
+    try {
+      const existing = new Set((codes || []).map((c) => String(c.code || "").toUpperCase()));
+      for (const promo of DEFAULT_BUY_GET_PROMOS) {
+        if (existing.has(promo.code)) continue;
+        try {
+          await api.post("/admin/promo-codes", {
+            code: promo.code,
+            type: "buy_x_get_y",
+            buyQty: promo.buyQty,
+            getQty: promo.getQty,
+            value: 0,
+            minOrderAmount: 0,
+          });
+        } catch (err) {
+          const msg = String(err.response?.data?.message || "").toLowerCase();
+          if (!msg.includes("already exists")) throw err;
+        }
+      }
+      setMessage({ type: "success", text: "Default Buy X Get Y promo codes ensured." });
+      await fetchCodes();
+    } catch (err) {
+      setMessage({
+        type: "error",
+        text: err.response?.data?.message || "Failed to add default Buy X Get Y promo codes",
+      });
+    } finally {
+      setSeedingDefaults(false);
+    }
+  }, [codes, fetchCodes]);
+
+  useEffect(() => {
+    if (!admin || loading || seedingDefaults || defaultsSeededRef.current) return;
+    const existing = new Set((codes || []).map((c) => String(c.code || "").toUpperCase()));
+    const hasAllDefaults = DEFAULT_BUY_GET_PROMOS.every((p) => existing.has(p.code));
+    if (!hasAllDefaults) {
+      defaultsSeededRef.current = true;
+      seedDefaultBuyGetPromos();
+    }
+  }, [admin, loading, seedingDefaults, codes, seedDefaultBuyGetPromos]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setMessage({ type: "", text: "" });
@@ -46,7 +99,9 @@ export default function AdminPromoCodes() {
       await api.post("/admin/promo-codes", {
         code: form.code.trim(),
         type: form.type,
-        value: form.type === "percent" ? Number(form.value) : Number(form.value),
+        value: form.type === "buy_x_get_y" ? 0 : Number(form.value),
+        buyQty: form.type === "buy_x_get_y" ? Number(form.buyQty) : undefined,
+        getQty: form.type === "buy_x_get_y" ? Number(form.getQty) : undefined,
         minOrderAmount: form.minOrderAmount ? Number(form.minOrderAmount) : undefined,
         validFrom: form.validFrom || undefined,
         validUntil: form.validUntil || undefined,
@@ -57,6 +112,8 @@ export default function AdminPromoCodes() {
         code: "",
         type: "percent",
         value: "",
+        buyQty: "",
+        getQty: "",
         minOrderAmount: "",
         validFrom: "",
         validUntil: "",
@@ -104,6 +161,9 @@ export default function AdminPromoCodes() {
   };
 
   const displayValue = (promo) => {
+    if (promo.type === "buy_x_get_y") {
+      return `Buy ${promo.buyQty || 0} Get ${promo.getQty || 0}`;
+    }
     if (promo.type === "percent") return `${promo.value}%`;
     return `₹${Number(promo.value).toFixed(2)}`;
   };
@@ -138,7 +198,17 @@ export default function AdminPromoCodes() {
 
         {/* Create form */}
         <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 mb-8">
-          <h2 className="text-xl font-semibold text-white mb-4">Create promo code</h2>
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <h2 className="text-xl font-semibold text-white">Create promo code</h2>
+            <button
+              type="button"
+              onClick={seedDefaultBuyGetPromos}
+              disabled={seedingDefaults}
+              className="px-4 py-2 rounded-lg bg-purple-600 text-white font-medium hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {seedingDefaults ? "Adding..." : "Add Buy3Get1 / Buy5Get2 / Buy10Get5"}
+            </button>
+          </div>
           <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1">Code *</label>
@@ -155,16 +225,23 @@ export default function AdminPromoCodes() {
               <label className="block text-sm font-medium text-gray-300 mb-1">Type *</label>
               <select
                 value={form.type}
-                onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    type: e.target.value,
+                    value: e.target.value === "buy_x_get_y" ? "0" : f.value,
+                  }))
+                }
                 className="w-full rounded-lg bg-gray-700 border border-gray-600 text-white px-3 py-2 focus:ring-2 focus:ring-blue-500"
               >
                 <option value="percent">Percent off</option>
                 <option value="fixed">Fixed amount (₹)</option>
+                <option value="buy_x_get_y">Buy X Get Y</option>
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1">
-                Value * {form.type === "percent" ? "(0–100)" : "(₹)"}
+                Value {form.type === "buy_x_get_y" ? "(auto)" : `* ${form.type === "percent" ? "(0–100)" : "(₹)"}`}
               </label>
               <input
                 type="number"
@@ -174,9 +251,38 @@ export default function AdminPromoCodes() {
                 value={form.value}
                 onChange={(e) => setForm((f) => ({ ...f, value: e.target.value }))}
                 className="w-full rounded-lg bg-gray-700 border border-gray-600 text-white px-3 py-2 focus:ring-2 focus:ring-blue-500"
-                required
+                required={form.type !== "buy_x_get_y"}
+                disabled={form.type === "buy_x_get_y"}
               />
             </div>
+            {form.type === "buy_x_get_y" && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Buy Qty *</label>
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={form.buyQty || ""}
+                    onChange={(e) => setForm((f) => ({ ...f, buyQty: e.target.value }))}
+                    className="w-full rounded-lg bg-gray-700 border border-gray-600 text-white px-3 py-2 focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Get Qty *</label>
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={form.getQty || ""}
+                    onChange={(e) => setForm((f) => ({ ...f, getQty: e.target.value }))}
+                    className="w-full rounded-lg bg-gray-700 border border-gray-600 text-white px-3 py-2 focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+              </>
+            )}
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1">Min order (₹)</label>
               <input

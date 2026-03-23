@@ -41,6 +41,14 @@ export default function Checkout() {
   const [shippingLoading, setShippingLoading] = useState(false);
   const [shippingError, setShippingError] = useState("");
 
+  const buildPromoValidationItems = useCallback(() => {
+    return cart.map((item) => ({
+      notebookId: item.notebookId,
+      quantity: Number(item.quantity) || 0,
+      price: Number(item.notebook?.price) || 0,
+    }));
+  }, [cart]);
+
   const loadLayerScript = useCallback((layerScriptUrl) => {
     return new Promise((resolve, reject) => {
       if (typeof window === "undefined") {
@@ -392,10 +400,20 @@ export default function Checkout() {
       const res = await api.post("/promo-codes/validate", {
         code,
         amount: subtotal,
+        items: buildPromoValidationItems(),
       });
       const data = res.data;
       if (data.valid) {
-        setAppliedPromo({ code: data.code, discountAmount: data.discountAmount, message: data.message });
+        setAppliedPromo({
+          code: data.code,
+          type: data.type,
+          buyQty: data.buyQty,
+          getQty: data.getQty,
+          discountAmount: data.discountAmount,
+          freeUnits: data.freeUnits || 0,
+          freeBreakdown: Array.isArray(data.freeBreakdown) ? data.freeBreakdown : [],
+          message: data.message,
+        });
         setPromoInput("");
       } else {
         setPromoError(data.message || "Invalid promo code");
@@ -421,11 +439,24 @@ export default function Checkout() {
     setAppliedPromo(null);
     setPromoLoading(true);
     api
-      .post("/promo-codes/validate", { code, amount: subtotal })
+      .post("/promo-codes/validate", {
+        code,
+        amount: subtotal,
+        items: buildPromoValidationItems(),
+      })
       .then((res) => {
         const data = res.data;
         if (data.valid) {
-          setAppliedPromo({ code: data.code, discountAmount: data.discountAmount, message: data.message });
+          setAppliedPromo({
+            code: data.code,
+            type: data.type,
+            buyQty: data.buyQty,
+            getQty: data.getQty,
+            discountAmount: data.discountAmount,
+            freeUnits: data.freeUnits || 0,
+            freeBreakdown: Array.isArray(data.freeBreakdown) ? data.freeBreakdown : [],
+            message: data.message,
+          });
           setPromoInput("");
         } else {
           setPromoError(data.message || "Code not applicable");
@@ -436,12 +467,26 @@ export default function Checkout() {
   };
 
   const formatPromoDescription = (promo) => {
-    const valueStr = promo.type === "percent" ? `${promo.value}% off` : `₹${Number(promo.value).toFixed(0)} off`;
+    let valueStr = "";
+    if (promo.type === "buy_x_get_y") {
+      valueStr = `Buy ${promo.buyQty || 0} Get ${promo.getQty || 0}`;
+    } else if (promo.type === "percent") {
+      valueStr = `${promo.value}% off`;
+    } else {
+      valueStr = `₹${Number(promo.value).toFixed(0)} off`;
+    }
     if (promo.minOrderAmount && promo.minOrderAmount > 0) {
       return `${valueStr} on orders above ${formatPrice(promo.minOrderAmount)}`;
     }
     return valueStr;
   };
+
+  const freeByNotebookId = (() => {
+    const rows = Array.isArray(appliedPromo?.freeBreakdown) ? appliedPromo.freeBreakdown : [];
+    return Object.fromEntries(
+      rows.map((r) => [String(r.notebookId), { freeQty: Number(r.freeQty) || 0, freeAmount: Number(r.freeAmount) || 0 }])
+    );
+  })();
 
   const formatValidUntil = (date) => {
     if (!date) return null;
@@ -739,12 +784,32 @@ export default function Checkout() {
                       key={item.notebookId}
                       className="flex justify-between text-sm"
                     >
-                      <span className="text-gray-400">
-                        {item.notebook.name} x{item.quantity}
-                      </span>
-                      <span className="text-white">
-                        {formatPrice(item.notebook.price * item.quantity)}
-                      </span>
+                      <div>
+                        <span className="text-gray-400">
+                          {item.notebook.name} x{item.quantity}
+                        </span>
+                        {freeByNotebookId[item.notebookId]?.freeQty > 0 && (
+                          <p className="text-xs text-green-400">
+                            {freeByNotebookId[item.notebookId].freeQty} item(s) free
+                          </p>
+                        )}
+                      </div>
+                      <div className="text-right">
+                        <span className="text-white">
+                          {formatPrice(
+                            Math.max(
+                              0,
+                              item.notebook.price * item.quantity -
+                                (freeByNotebookId[item.notebookId]?.freeAmount || 0)
+                            )
+                          )}
+                        </span>
+                        {freeByNotebookId[item.notebookId]?.freeAmount > 0 && (
+                          <p className="text-xs text-gray-500 line-through">
+                            {formatPrice(item.notebook.price * item.quantity)}
+                          </p>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
