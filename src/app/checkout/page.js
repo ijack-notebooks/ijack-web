@@ -40,6 +40,8 @@ export default function Checkout() {
   const [selectedShippingOption, setSelectedShippingOption] = useState(null);
   const [shippingLoading, setShippingLoading] = useState(false);
   const [shippingError, setShippingError] = useState("");
+  const normalizedDeliveryPincode = String(formData.zipCode || "").replace(/\D/g, "").slice(0, 6);
+  const hasPincodeInput = normalizedDeliveryPincode.length > 0;
 
   const buildPromoValidationItems = useCallback(() => {
     return cart.map((item) => ({
@@ -192,7 +194,6 @@ export default function Checkout() {
   }, [cartKey]);
 
   useEffect(() => {
-    const normalizedDeliveryPincode = String(formData.zipCode || "").replace(/\D/g, "").slice(0, 6);
     const rawSubtotal = cart.reduce(
       (sum, item) => sum + (Number(item.notebook?.price) || 0) * (Number(item.quantity) || 0),
       0
@@ -293,7 +294,7 @@ export default function Checkout() {
     return () => {
       active = false;
     };
-  }, [cart, cartKey, formData.zipCode, user, appliedPromo?.discountAmount]);
+  }, [cart, cartKey, normalizedDeliveryPincode, user, appliedPromo?.discountAmount]);
 
   // Update form data when user changes
   useEffect(() => {
@@ -320,6 +321,7 @@ export default function Checkout() {
     discountedSubtotal,
     shippingCharge,
     fallbackShippingCharge,
+    shippingIncluded,
     gstAmount,
     totalBeforeDiscount,
     total,
@@ -331,10 +333,11 @@ export default function Checkout() {
       0
     );
     const fallbackShipping = Math.ceil(totalWeightGrams / 500) * SHIPPING_PER_500G;
-    const shipping =
+    const computedShipping =
       selectedShippingOption && Number.isFinite(Number(selectedShippingOption.rate))
         ? Number(selectedShippingOption.rate)
         : fallbackShipping;
+    const shipping = hasPincodeInput ? computedShipping : 0;
     const gstOnOriginalSubtotal = cart.reduce((sum, item) => {
       const itemTotal = (item.notebook?.price ?? 0) * item.quantity;
       const gstPct = gstByCategory[item.notebook?.category ?? ""] ?? 0;
@@ -350,12 +353,13 @@ export default function Checkout() {
       discountedSubtotal: discountedSub,
       shippingCharge: shipping,
       fallbackShippingCharge: fallbackShipping,
+      shippingIncluded: hasPincodeInput,
       gstAmount: Math.round(gst),
       totalBeforeDiscount: beforeDiscount,
       discountAmount: discount,
       total: beforeDiscount,
     };
-  }, [cart, getTotalPrice, gstByCategory, selectedShippingOption, appliedPromo?.discountAmount]);
+  }, [cart, getTotalPrice, gstByCategory, selectedShippingOption, appliedPromo?.discountAmount, hasPincodeInput]);
 
   // Show loading state while checking auth
   if (authLoading) {
@@ -486,6 +490,28 @@ export default function Checkout() {
     return Object.fromEntries(
       rows.map((r) => [String(r.notebookId), { freeQty: Number(r.freeQty) || 0, freeAmount: Number(r.freeAmount) || 0 }])
     );
+  })();
+  const freeItemsDetailed = (() => {
+    const rows = Array.isArray(appliedPromo?.freeBreakdown) ? appliedPromo.freeBreakdown : [];
+    if (!rows.length) return [];
+    return rows
+      .map((row) => {
+        const notebookId = String(row.notebookId);
+        const cartItem = cart.find((item) => String(item.notebookId) === notebookId);
+        if (!cartItem) return null;
+        const freeQty = Number(row.freeQty) || 0;
+        const freeAmount = Number(row.freeAmount) || 0;
+        if (freeQty <= 0 || freeAmount <= 0) return null;
+        const unitPrice = Number(cartItem.notebook?.price) || 0;
+        return {
+          notebookId,
+          name: cartItem.notebook?.name || "Notebook",
+          freeQty,
+          unitPrice,
+          freeAmount,
+        };
+      })
+      .filter(Boolean);
   })();
 
   const formatValidUntil = (date) => {
@@ -854,6 +880,33 @@ export default function Checkout() {
                     <p className="text-xs text-red-400">{promoError}</p>
                   )}
                 </div>
+                {appliedPromo?.type === "buy_x_get_y" && freeItemsDetailed.length > 0 && (
+                  <div className="border-t border-gray-700 pt-4 pb-4">
+                    <p className="text-xs font-medium text-green-400 uppercase tracking-wider mb-2">
+                      Free items unlocked ({appliedPromo.code})
+                    </p>
+                    <div className="space-y-2">
+                      {freeItemsDetailed.map((item) => (
+                        <div
+                          key={`free-${item.notebookId}`}
+                          className="rounded-md bg-green-900/20 border border-green-800/50 px-3 py-2"
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="text-sm text-white truncate">{item.name}</p>
+                              <p className="text-xs text-green-300">
+                                {item.freeQty} free item(s) × {formatPrice(item.unitPrice)}
+                              </p>
+                            </div>
+                            <span className="text-sm font-semibold text-green-300">
+                              −{formatPrice(item.freeAmount)}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 {/* Available promo codes */}
                 {availablePromos.length > 0 && (
                   <div className="border-t border-gray-700 pt-4 pb-2">
@@ -896,18 +949,26 @@ export default function Checkout() {
                     <span>Subtotal</span>
                     <span className="text-white">{formatPrice(subtotal)}</span>
                   </div>
-                  <div className="flex justify-between text-sm text-gray-400">
-                    <span>
-                      Shipping{" "}
-                      {selectedShippingOption?.courierName
-                        ? `(${selectedShippingOption.courierName})`
-                        : "(Fallback)"}
-                    </span>
-                    <span className="text-white">{formatPrice(shippingCharge)}</span>
-                  </div>
-                  {!selectedShippingOption && (
+                  {shippingIncluded ? (
+                    <>
+                      <div className="flex justify-between text-sm text-gray-400">
+                        <span>
+                          Shipping{" "}
+                          {selectedShippingOption?.courierName
+                            ? `(${selectedShippingOption.courierName})`
+                            : "(Fallback)"}
+                        </span>
+                        <span className="text-white">{formatPrice(shippingCharge)}</span>
+                      </div>
+                      {!selectedShippingOption && (
+                        <div className="text-xs text-gray-500">
+                          Fallback estimate: {formatPrice(fallbackShippingCharge)} (Rs 26 per 500g)
+                        </div>
+                      )}
+                    </>
+                  ) : (
                     <div className="text-xs text-gray-500">
-                      Fallback estimate: {formatPrice(fallbackShippingCharge)} (Rs 26 per 500g)
+                      Enter delivery pincode to calculate shipping charges.
                     </div>
                   )}
                   <div className="flex justify-between text-sm text-gray-400">
@@ -921,7 +982,9 @@ export default function Checkout() {
                     </div>
                   )}
                   <div className="flex justify-between text-lg font-bold pt-2 border-t border-gray-600">
-                    <span className="text-white">Total</span>
+                    <span className="text-white">
+                      {shippingIncluded ? "Total" : "Total (without shipping)"}
+                    </span>
                     <span className="text-blue-400">{formatPrice(total)}</span>
                   </div>
                 </div>
