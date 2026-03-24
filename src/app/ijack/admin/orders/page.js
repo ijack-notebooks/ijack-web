@@ -27,6 +27,77 @@ export default function AllOrders() {
   const [cancelRefundLoading, setCancelRefundLoading] = useState(false);
   const [cancelRefundError, setCancelRefundError] = useState("");
 
+  const roundTo2 = (value) => Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
+
+  const computeOrderBreakdown = useCallback((order) => {
+    const subtotal = roundTo2(
+      (order?.items || []).reduce(
+        (sum, item) => sum + (Number(item.price) || 0) * (Number(item.quantity) || 0),
+        0
+      )
+    );
+    const discountAmount = roundTo2(Math.max(0, Number(order?.discountAmount) || 0));
+    const discountedSubtotal = roundTo2(Math.max(0, subtotal - discountAmount));
+    const shippingCharge = roundTo2(Math.max(0, Number(order?.shipping?.charge) || 0));
+    const total = roundTo2(Number(order?.totalAmount) || 0);
+    const gstAmount = roundTo2(Math.max(0, total - discountedSubtotal - shippingCharge));
+    return { subtotal, discountAmount, discountedSubtotal, shippingCharge, gstAmount, total };
+  }, []);
+
+  // Derive free-item rows when discount matches full unit prices (buy/get promos).
+  const deriveFreeItemsFromDiscount = useCallback((order, discountAmount) => {
+    const targetDiscount = roundTo2(discountAmount);
+    if (!order?.items?.length || targetDiscount <= 0) {
+      return { rows: [], isExact: false };
+    }
+
+    const units = [];
+    for (const item of order.items) {
+      const unitPrice = roundTo2(item.price);
+      const qty = Math.max(0, Number(item.quantity) || 0);
+      for (let i = 0; i < qty; i += 1) {
+        units.push({
+          notebookId: String(item.notebook?._id || item.notebook || ""),
+          name: item.notebook?.name || "Notebook",
+          unitPrice,
+        });
+      }
+    }
+
+    units.sort((a, b) => a.unitPrice - b.unitPrice);
+    let remaining = targetDiscount;
+    const taken = [];
+
+    for (const unit of units) {
+      if (remaining <= 0) break;
+      // Allow tiny float tolerance.
+      if (remaining + 0.005 >= unit.unitPrice) {
+        taken.push(unit);
+        remaining = roundTo2(remaining - unit.unitPrice);
+      }
+    }
+
+    const grouped = new Map();
+    for (const unit of taken) {
+      const key = `${unit.notebookId}::${unit.unitPrice}`;
+      const existing = grouped.get(key) || {
+        notebookId: unit.notebookId,
+        name: unit.name,
+        freeQty: 0,
+        unitPrice: unit.unitPrice,
+        freeAmount: 0,
+      };
+      existing.freeQty += 1;
+      existing.freeAmount = roundTo2(existing.freeAmount + unit.unitPrice);
+      grouped.set(key, existing);
+    }
+
+    return {
+      rows: Array.from(grouped.values()),
+      isExact: remaining === 0,
+    };
+  }, []);
+
   const fetchOrders = useCallback(async () => {
     try {
       setLoading(true);
@@ -306,6 +377,13 @@ export default function AllOrders() {
     return method;
   };
 
+  const getPromoCodeUsedLabel = (order) => {
+    const promo = order?.promoCode;
+    if (!promo) return "—";
+    if (typeof promo === "string") return promo;
+    return promo.code || promo._id || "—";
+  };
+
   const fetchTracking = async () => {
     const awb = selectedOrder?.shiprocket?.awbCode;
     if (!awb) return;
@@ -321,6 +399,11 @@ export default function AllOrders() {
       setTrackingLoading(false);
     }
   };
+
+  const selectedOrderBreakdown = selectedOrder ? computeOrderBreakdown(selectedOrder) : null;
+  const selectedOrderFreeItems = selectedOrderBreakdown
+    ? deriveFreeItemsFromDiscount(selectedOrder, selectedOrderBreakdown.discountAmount)
+    : { rows: [], isExact: false };
 
   if (loading) {
     return (
@@ -571,6 +654,12 @@ export default function AllOrders() {
                     </p>
                   </div>
                   <div>
+                    <p className="text-gray-400 text-sm">Promo Code Used</p>
+                    <p className="text-white">
+                      {getPromoCodeUsedLabel(selectedOrder)}
+                    </p>
+                  </div>
+                  <div>
                     <p className="text-gray-400 text-sm">Total Amount</p>
                     <p className="text-blue-400 font-bold text-lg">
                       {formatPrice(selectedOrder.totalAmount)}
@@ -703,27 +792,124 @@ export default function AllOrders() {
                 <div>
                   <p className="text-gray-400 text-sm mb-3">Items</p>
                   <div className="space-y-2">
-                    {selectedOrder.items.map((item, index) => (
-                      <div
-                        key={index}
-                        className="bg-gray-700 rounded-lg p-4 flex justify-between"
-                      >
-                        <div>
-                          <p className="text-white font-medium">
-                            {item.notebook?.name || "Notebook"}
-                          </p>
-                          <p className="text-gray-400 text-sm">
-                            Quantity: {item.quantity} ×{" "}
-                            {formatPrice(item.price)}
-                          </p>
-                        </div>
-                        <p className="text-blue-400 font-semibold">
-                          {formatPrice(item.price * item.quantity)}
-                        </p>
-                      </div>
-                    ))}
+                    {(() => {
+                      const freeByNotebookId = Object.fromEntries(
+                        (selectedOrderFreeItems?.isExact ? selectedOrderFreeItems.rows : []).map((row) => [
+                          String(row.notebookId),
+                          {
+                            freeQty: Number(row.freeQty) || 0,
+                            freeAmount: Number(row.freeAmount) || 0,
+                          },
+                        ])
+                      );
+
+                      return selectedOrder.items.map((item, index) => {
+                        const notebookId = String(item.notebook?._id || item.notebook || "");
+                        const lineTotal = roundTo2((Number(item.price) || 0) * (Number(item.quantity) || 0));
+                        const freeAmount = roundTo2(freeByNotebookId[notebookId]?.freeAmount || 0);
+                        const freeQty = Number(freeByNotebookId[notebookId]?.freeQty || 0);
+                        const netLine = roundTo2(Math.max(0, lineTotal - freeAmount));
+
+                        return (
+                          <div
+                            key={index}
+                            className="bg-gray-700 rounded-lg p-4 flex justify-between"
+                          >
+                            <div>
+                              <p className="text-white font-medium">
+                                {item.notebook?.name || "Notebook"}
+                              </p>
+                              <p className="text-gray-400 text-sm">
+                                Quantity: {item.quantity} × {formatPrice(item.price)}
+                              </p>
+                              {freeQty > 0 && (
+                                <p className="text-xs text-green-400 mt-1">
+                                  {freeQty} item(s) free
+                                </p>
+                              )}
+                            </div>
+                            <div className="text-right">
+                              <p className="text-blue-400 font-semibold">
+                                {formatPrice(netLine)}
+                              </p>
+                              {freeAmount > 0 && (
+                                <p className="text-xs text-gray-500 line-through">
+                                  {formatPrice(lineTotal)}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      });
+                    })()}
                   </div>
                 </div>
+
+                {selectedOrderBreakdown && (
+                  <div>
+                    <p className="text-gray-400 text-sm mb-3">Order Summary</p>
+                    <div className="bg-gray-700 rounded-lg p-4 space-y-2 text-sm">
+                      <div className="flex justify-between text-gray-300">
+                        <span>
+                          Subtotal {selectedOrderBreakdown.discountAmount > 0 ? "(after discount)" : ""}
+                        </span>
+                        <span className="text-white">{formatPrice(selectedOrderBreakdown.discountedSubtotal)}</span>
+                      </div>
+                      {selectedOrderBreakdown.discountAmount > 0 && (
+                        <>
+                          <div className="flex justify-between text-xs text-gray-400">
+                            <span>Promo code used</span>
+                            <span className="text-white">{getPromoCodeUsedLabel(selectedOrder)}</span>
+                          </div>
+                          <div className="flex justify-between text-xs text-gray-400">
+                            <span>Original subtotal</span>
+                            <span className="line-through">{formatPrice(selectedOrderBreakdown.subtotal)}</span>
+                          </div>
+                          <div className="flex justify-between text-xs text-green-400">
+                            <span>You saved</span>
+                            <span>{formatPrice(selectedOrderBreakdown.discountAmount)}</span>
+                          </div>
+                        </>
+                      )}
+                      <div className="flex justify-between text-gray-300">
+                        <span>Shipping</span>
+                        <span className="text-white">{formatPrice(selectedOrderBreakdown.shippingCharge)}</span>
+                      </div>
+                      <div className="flex justify-between text-gray-300">
+                        <span>GST</span>
+                        <span className="text-white">{formatPrice(selectedOrderBreakdown.gstAmount)}</span>
+                      </div>
+                      <div className="flex justify-between text-base font-bold pt-2 border-t border-gray-600">
+                        <span className="text-white">Total</span>
+                        <span className="text-blue-400">{formatPrice(selectedOrderBreakdown.total)}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {selectedOrderFreeItems.isExact && selectedOrderFreeItems.rows.length > 0 && (
+                  <div>
+                    <p className="text-gray-400 text-sm mb-3">Free Items (from promo discount)</p>
+                    <div className="space-y-2">
+                      {selectedOrderFreeItems.rows.map((row, idx) => (
+                        <div
+                          key={`${row.notebookId}-${idx}`}
+                          className="bg-green-900/20 border border-green-800/60 rounded-lg p-3 flex items-center justify-between"
+                        >
+                          <div>
+                            <p className="text-white text-sm font-medium">{row.name}</p>
+                            <p className="text-xs text-green-300">
+                              {row.freeQty} free × {formatPrice(row.unitPrice)}
+                            </p>
+                          </div>
+                          <p className="text-sm font-semibold text-green-300">
+                            −{formatPrice(row.freeAmount)}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 <div>
                   <p className="text-gray-400 text-sm mb-3">Contact Details</p>
