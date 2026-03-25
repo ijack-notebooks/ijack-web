@@ -26,6 +26,9 @@ export default function AllOrders() {
   const [trackingError, setTrackingError] = useState("");
   const [cancelRefundLoading, setCancelRefundLoading] = useState(false);
   const [cancelRefundError, setCancelRefundError] = useState("");
+  const [manualPaymentStatus, setManualPaymentStatus] = useState("PENDING");
+  const [manualPaymentStatusLoading, setManualPaymentStatusLoading] = useState(false);
+  const [manualPaymentStatusError, setManualPaymentStatusError] = useState("");
 
   const roundTo2 = (value) => Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
 
@@ -399,6 +402,34 @@ export default function AllOrders() {
       setTrackingLoading(false);
     }
   };
+
+  const updatePaymentStatusManually = async () => {
+    if (!paymentHistoryOrder) return;
+    setManualPaymentStatusLoading(true);
+    setManualPaymentStatusError("");
+    try {
+      const res = await api.patch(`/admin/orders/${paymentHistoryOrder._id}/payment-status`, {
+        paymentStatus: manualPaymentStatus,
+      });
+      const updated = res.data;
+      setPaymentHistoryOrder(updated);
+      if (selectedOrder?._id === updated._id) setSelectedOrder(updated);
+      if (shipmentHistoryOrder?._id === updated._id) setShipmentHistoryOrder(updated);
+      await fetchOrders();
+    } catch (err) {
+      setManualPaymentStatusError(
+        err.response?.data?.message || err.message || "Failed to update payment status"
+      );
+    } finally {
+      setManualPaymentStatusLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!paymentHistoryOrder) return;
+    setManualPaymentStatus(paymentHistoryOrder.payment?.paymentStatus || "PENDING");
+    setManualPaymentStatusError("");
+  }, [paymentHistoryOrder]);
 
   const selectedOrderBreakdown = selectedOrder ? computeOrderBreakdown(selectedOrder) : null;
   const selectedOrderFreeItems = selectedOrderBreakdown
@@ -1143,6 +1174,41 @@ export default function AllOrders() {
               </div>
 
               <div className="p-6 space-y-4">
+                <div className="bg-gray-700 rounded-lg p-4 border border-gray-600">
+                  <p className="text-gray-300 text-sm font-medium mb-3">
+                    Manual Payment Status Sync
+                  </p>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <select
+                      value={manualPaymentStatus}
+                      onChange={(e) => setManualPaymentStatus(e.target.value)}
+                      className="bg-gray-800 text-white px-3 py-2 rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    >
+                      <option value="PENDING">PENDING</option>
+                      <option value="SUCCESS">SUCCESS</option>
+                      <option value="FAILED">FAILED</option>
+                      <option value="CANCELLED">CANCELLED</option>
+                    </select>
+                    <button
+                      type="button"
+                      onClick={updatePaymentStatusManually}
+                      disabled={
+                        manualPaymentStatusLoading ||
+                        manualPaymentStatus === (paymentHistoryOrder.payment?.paymentStatus || "PENDING")
+                      }
+                      className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-3 py-2 rounded-lg text-sm font-medium"
+                    >
+                      {manualPaymentStatusLoading ? "Updating..." : "Update payment status"}
+                    </button>
+                  </div>
+                  {manualPaymentStatusError && (
+                    <p className="text-red-400 text-xs mt-2">{manualPaymentStatusError}</p>
+                  )}
+                  <p className="text-gray-400 text-xs mt-2">
+                    Use only when gateway dashboard and site status are out of sync.
+                  </p>
+                </div>
+
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
                     <p className="text-gray-400">Current payment status</p>
