@@ -29,6 +29,8 @@ export default function AllOrders() {
   const [manualPaymentStatus, setManualPaymentStatus] = useState("PENDING");
   const [manualPaymentStatusLoading, setManualPaymentStatusLoading] = useState(false);
   const [manualPaymentStatusError, setManualPaymentStatusError] = useState("");
+  const [refreshPaymentLoading, setRefreshPaymentLoading] = useState(false);
+  const [refreshPaymentMessage, setRefreshPaymentMessage] = useState("");
 
   const roundTo2 = (value) => Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
 
@@ -408,10 +410,20 @@ export default function AllOrders() {
     setManualPaymentStatusLoading(true);
     setManualPaymentStatusError("");
     try {
-      const res = await api.patch(`/admin/orders/${paymentHistoryOrder._id}/payment-status`, {
-        paymentStatus: manualPaymentStatus,
-      });
-      const updated = res.data;
+      let updated = null;
+      try {
+        const res = await api.patch(`/admin/orders/${paymentHistoryOrder._id}/payment-status`, {
+          paymentStatus: manualPaymentStatus,
+        });
+        updated = res.data;
+      } catch (err) {
+        if (err.response?.status !== 404) throw err;
+        // Fallback for deployments where PATCH route is unavailable.
+        const res = await api.post(`/admin/orders/${paymentHistoryOrder._id}/payment-status`, {
+          paymentStatus: manualPaymentStatus,
+        });
+        updated = res.data;
+      }
       setPaymentHistoryOrder(updated);
       if (selectedOrder?._id === updated._id) setSelectedOrder(updated);
       if (shipmentHistoryOrder?._id === updated._id) setShipmentHistoryOrder(updated);
@@ -425,10 +437,38 @@ export default function AllOrders() {
     }
   };
 
+  const refreshPaymentStatusFromGateway = async () => {
+    if (!paymentHistoryOrder) return;
+    setRefreshPaymentLoading(true);
+    setRefreshPaymentMessage("");
+    setManualPaymentStatusError("");
+    try {
+      const res = await api.post(
+        `/admin/orders/${paymentHistoryOrder._id}/payment-status/refresh`
+      );
+      const updated = res.data?.order;
+      if (!updated) throw new Error("Updated order data not returned");
+      setPaymentHistoryOrder(updated);
+      if (selectedOrder?._id === updated._id) setSelectedOrder(updated);
+      if (shipmentHistoryOrder?._id === updated._id) setShipmentHistoryOrder(updated);
+      await fetchOrders();
+      setRefreshPaymentMessage(
+        `Refreshed: ${res.data?.previousStatus || "—"} -> ${res.data?.currentStatus || "—"}`
+      );
+    } catch (err) {
+      setManualPaymentStatusError(
+        err.response?.data?.message || err.message || "Failed to refresh payment status"
+      );
+    } finally {
+      setRefreshPaymentLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (!paymentHistoryOrder) return;
     setManualPaymentStatus(paymentHistoryOrder.payment?.paymentStatus || "PENDING");
     setManualPaymentStatusError("");
+    setRefreshPaymentMessage("");
   }, [paymentHistoryOrder]);
 
   const selectedOrderBreakdown = selectedOrder ? computeOrderBreakdown(selectedOrder) : null;
@@ -1179,6 +1219,14 @@ export default function AllOrders() {
                     Manual Payment Status Sync
                   </p>
                   <div className="flex flex-wrap items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={refreshPaymentStatusFromGateway}
+                      disabled={refreshPaymentLoading}
+                      className="bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-3 py-2 rounded-lg text-sm font-medium"
+                    >
+                      {refreshPaymentLoading ? "Refreshing..." : "Refresh Payment Status"}
+                    </button>
                     <select
                       value={manualPaymentStatus}
                       onChange={(e) => setManualPaymentStatus(e.target.value)}
@@ -1203,6 +1251,9 @@ export default function AllOrders() {
                   </div>
                   {manualPaymentStatusError && (
                     <p className="text-red-400 text-xs mt-2">{manualPaymentStatusError}</p>
+                  )}
+                  {refreshPaymentMessage && (
+                    <p className="text-green-400 text-xs mt-2">{refreshPaymentMessage}</p>
                   )}
                   <p className="text-gray-400 text-xs mt-2">
                     Use only when gateway dashboard and site status are out of sync.
