@@ -1343,6 +1343,12 @@ export default function AllOrders() {
                   <p className="text-sm text-gray-400 mt-1 font-mono">
                     {shipmentHistoryOrder._id}
                   </p>
+                  <Link
+                    href={`/ijack/admin/shipments?orderId=${shipmentHistoryOrder._id}`}
+                    className="inline-block mt-3 text-sm font-medium text-blue-400 hover:text-blue-300"
+                  >
+                    Open in Shipments
+                  </Link>
                 </div>
                 <button
                   onClick={() => setShipmentHistoryOrder(null)}

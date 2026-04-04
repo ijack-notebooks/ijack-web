@@ -178,7 +178,13 @@ export default function Orders() {
                       <div className="text-right">
                         <p className="text-sm text-gray-400 mb-1 uppercase tracking-wider">Status</p>
                         {(() => {
-                          const statusLabel = order.shiprocket?.trackingStatus || order.status;
+                          const rawTrackingStatus = order.shiprocket?.trackingStatus || "";
+                          const trackingIsCancelled = rawTrackingStatus.toLowerCase().includes("cancel");
+                          const orderNotCancelled = order.status !== "cancelled";
+                          const statusLabel =
+                            trackingIsCancelled && orderNotCancelled
+                              ? order.status
+                              : rawTrackingStatus || order.status;
                           const normalizedStatus = String(statusLabel || "").toLowerCase();
                           const statusClassName = normalizedStatus.includes("delivered")
                             ? "bg-green-900/40 text-green-400 border border-green-800"

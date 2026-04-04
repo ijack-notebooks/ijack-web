@@ -143,13 +143,6 @@ export default function Login() {
               </div>
             </div>
 
-            <div className="bg-gray-700 p-4 rounded-md">
-              <p className="text-sm text-gray-300 mb-2">Demo Accounts:</p>
-              <p className="text-xs text-gray-400">
-                user1, user2, user3, user4, user5 (password: 1234)
-              </p>
-            </div>
-
             <div>
               <button
                 type="submit"

@@ -11,6 +11,7 @@ import { formatPrice } from "../../lib/currency";
 
 // Fallback shipping when live courier rates are unavailable.
 const SHIPPING_PER_500G = 26;
+const PREFERRED_COURIERS = ["dtdc", "expressbees", "delhivery"];
 
 export default function Checkout() {
   const { cart, getTotalPrice, clearCart } = useCart();
@@ -48,6 +49,10 @@ export default function Checkout() {
       String(formData.country || "").trim() &&
       normalizedDeliveryPincode.length === 6
   );
+  const isPreferredCourier = useCallback((name) => {
+    const normalized = String(name || "").toLowerCase();
+    return PREFERRED_COURIERS.some((courier) => normalized.includes(courier));
+  }, []);
 
   const buildPromoValidationItems = useCallback(() => {
     return cart.map((item) => ({
@@ -232,11 +237,14 @@ export default function Checkout() {
         if (!active) return;
         const data = res.data || {};
 
-        const options = Array.isArray(data?.options) ? data.options : [];
+        const allOptions = Array.isArray(data?.options) ? data.options : [];
+        const options = allOptions.filter((opt) => isPreferredCourier(opt?.courierName));
         setShippingOptions(options);
         if (!options.length) {
           setSelectedShippingOption(null);
-          setShippingError("No courier options available for this pincode right now.");
+          setShippingError(
+            "No preferred courier options (DTDC, Expressbees, Delhivery) available for this address right now."
+          );
           return;
         }
         setSelectedShippingOption((prev) => {
@@ -263,7 +271,7 @@ export default function Checkout() {
     return () => {
       active = false;
     };
-  }, [cart, cartKey, normalizedDeliveryPincode, user, appliedPromo?.discountAmount, hasAddressForShipping]);
+  }, [cart, cartKey, normalizedDeliveryPincode, user, appliedPromo?.discountAmount, hasAddressForShipping, isPreferredCourier]);
 
   // Update form data when user changes
   useEffect(() => {

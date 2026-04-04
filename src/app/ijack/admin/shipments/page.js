@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, Suspense } from "react";
+import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAdminAuth } from "../../../../contexts/AdminAuthContext";
@@ -22,8 +22,30 @@ function ShipmentsContent() {
   const [actionError, setActionError] = useState("");
   const [trackingData, setTrackingData] = useState(null);
   const [trackingModalOpen, setTrackingModalOpen] = useState(false);
+  const [courierModalOpen, setCourierModalOpen] = useState(false);
+  const [courierOptions, setCourierOptions] = useState([]);
+  const [courierOptionsLoading, setCourierOptionsLoading] = useState(false);
+  const [courierOptionsError, setCourierOptionsError] = useState("");
+  const [selectedCourierOption, setSelectedCourierOption] = useState(null);
+  const [customerCourierChoice, setCustomerCourierChoice] = useState(null);
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
+  const [cancelReasonOption, setCancelReasonOption] = useState("pickup_delay");
+  const [cancelReasonCustom, setCancelReasonCustom] = useState("");
+
+  const CANCEL_REASON_OPTIONS = [
+    { value: "pickup_delay", label: "Pickup delay" },
+    { value: "customer_address_issue", label: "Customer address issue" },
+    { value: "inventory_issue", label: "Inventory issue" },
+    { value: "courier_unavailable", label: "Courier unavailable" },
+    { value: "manual_entry", label: "Manual entry" },
+  ];
 
   const getTrackingUrl = (order) => order?.shiprocket?.trackingUrl || null;
+  const getCourierLabel = (order) =>
+    order?.shiprocket?.courierName ||
+    selectedCourierOption?.courierName ||
+    order?.shipping?.courierName ||
+    (order?.shipping?.courierCompanyId ? `Courier #${order.shipping.courierCompanyId}` : "—");
 
   const fetchOrders = useCallback(async () => {
     try {
@@ -61,19 +83,72 @@ function ShipmentsContent() {
     api.get("/admin/shiprocket/config").then((r) => setShiprocketConfig(r.data)).catch(() => setShiprocketConfig({ configured: false }));
   }, [admin]);
 
+  const deepLinkFetchForId = useRef(null);
+  const prevOrderIdFromUrl = useRef(orderIdFromUrl);
+
   useEffect(() => {
-    if (!orderIdFromUrl || !orders.length) return;
+    if (!orderIdFromUrl) return;
     const found = orders.find((o) => o._id === orderIdFromUrl);
     if (found) setSelectedOrder(found);
   }, [orderIdFromUrl, orders]);
+
+  useEffect(() => {
+    if (prevOrderIdFromUrl.current !== orderIdFromUrl) {
+      deepLinkFetchForId.current = null;
+      prevOrderIdFromUrl.current = orderIdFromUrl;
+    }
+  }, [orderIdFromUrl]);
+
+  // Deep link: list only includes active shipments; load by id so history modal link still selects the row.
+  useEffect(() => {
+    if (!admin || !orderIdFromUrl || loading) return;
+    const found = orders.find((o) => o._id === orderIdFromUrl);
+    if (found) {
+      deepLinkFetchForId.current = null;
+      return;
+    }
+    if (deepLinkFetchForId.current === orderIdFromUrl) return;
+    deepLinkFetchForId.current = orderIdFromUrl;
+
+    let cancelled = false;
+    api
+      .get(`/admin/orders/${orderIdFromUrl}`)
+      .then((res) => {
+        if (cancelled) return;
+        const o = res.data;
+        if (!o?.shiprocket?.orderId) return;
+        setSelectedOrder(o);
+        setOrders((prev) => {
+          if (prev.some((p) => p._id === o._id)) {
+            return prev.map((p) => (p._id === o._id ? o : p));
+          }
+          return [o, ...prev];
+        });
+      })
+      .catch(() => {
+        deepLinkFetchForId.current = null;
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [admin, orderIdFromUrl, loading, orders]);
 
   const assignAwb = async () => {
     if (!selectedOrder) return;
     setActionLoading(true);
     setActionError("");
     try {
-      const res = await api.post("/admin/shiprocket/assign-awb", { orderId: selectedOrder._id });
+      const payload = {
+        orderId: selectedOrder._id,
+      };
+      if (selectedCourierOption?.courierCompanyId) {
+        payload.courierCompanyId = selectedCourierOption.courierCompanyId;
+        payload.courierName = selectedCourierOption.courierName;
+      }
+      const res = await api.post("/admin/shiprocket/assign-awb", payload);
       setSelectedOrder(res.data.order);
+      setCourierModalOpen(false);
       await fetchOrders();
     } catch (err) {
       const data = err.response?.data;
@@ -175,14 +250,27 @@ function ShipmentsContent() {
 
   const cancelShipment = async () => {
     if (!selectedOrder?.shiprocket?.orderId) return;
-    if (!confirm("Cancel this Shiprocket shipment? The order will be removed from the shipments list and you can create a new shipment from All Orders if needed.")) return;
+    const reason =
+      cancelReasonOption === "manual_entry"
+        ? cancelReasonCustom.trim()
+        : (CANCEL_REASON_OPTIONS.find((opt) => opt.value === cancelReasonOption)?.label || "").trim();
+    if (!reason) {
+      setActionError("Please provide a shipment cancellation reason.");
+      return;
+    }
     setActionLoading(true);
     setActionError("");
     try {
-      const res = await api.post("/admin/shiprocket/cancel", { orderId: selectedOrder._id });
+      const res = await api.post("/admin/shiprocket/cancel", {
+        orderId: selectedOrder._id,
+        cancellationReason: reason,
+      });
       if (res.data?.warning) {
         alert(res.data.message);
       }
+      setCancelModalOpen(false);
+      setCancelReasonOption("pickup_delay");
+      setCancelReasonCustom("");
       setSelectedOrder(null);
       setTrackingData(null);
       await fetchOrders();
@@ -190,6 +278,47 @@ function ShipmentsContent() {
       setActionError(err.response?.data?.message || err.message || "Failed to cancel shipment");
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  const openCancelModal = () => {
+    if (!selectedOrder?.shiprocket?.orderId) return;
+    setCancelModalOpen(true);
+    setCancelReasonOption("pickup_delay");
+    setCancelReasonCustom("");
+    setActionError("");
+  };
+
+  const openCourierModal = async () => {
+    if (!selectedOrder || selectedOrder.shiprocket?.awbCode) return;
+    setCourierModalOpen(true);
+    setCourierOptions([]);
+    setCourierOptionsError("");
+    setCourierOptionsLoading(true);
+    try {
+      const res = await api.get(`/admin/shiprocket/courier-options/${selectedOrder._id}`);
+      const options = Array.isArray(res.data?.options) ? res.data.options : [];
+      const customerChoice = res.data?.customerChoice || {
+        courierCompanyId: selectedOrder.shipping?.courierCompanyId || null,
+        courierName: selectedOrder.shipping?.courierName || null,
+      };
+      setCourierOptions(options);
+      setCustomerCourierChoice(customerChoice);
+      setSelectedCourierOption((prev) => {
+        if (prev?.courierCompanyId) {
+          const keep = options.find((opt) => opt.courierCompanyId === prev.courierCompanyId);
+          if (keep) return keep;
+        }
+        if (customerChoice?.courierCompanyId) {
+          const customerOption = options.find((opt) => opt.courierCompanyId === Number(customerChoice.courierCompanyId));
+          if (customerOption) return customerOption;
+        }
+        return options[0] || null;
+      });
+    } catch (err) {
+      setCourierOptionsError(err.response?.data?.message || err.message || "Failed to load courier options");
+    } finally {
+      setCourierOptionsLoading(false);
     }
   };
 
@@ -252,6 +381,11 @@ function ShipmentsContent() {
                       router.replace(`/ijack/admin/shipments?orderId=${order._id}`, { scroll: false });
                       setTrackingData(null);
                       setTrackingModalOpen(false);
+                      setCourierModalOpen(false);
+                      setCourierOptions([]);
+                      setCourierOptionsError("");
+                      setSelectedCourierOption(null);
+                      setCustomerCourierChoice(null);
                       setActionError("");
                     }}
                     className={`w-full text-left px-4 py-3 border-b border-gray-700 hover:bg-gray-700 transition-colors ${
@@ -301,17 +435,29 @@ function ShipmentsContent() {
                     </div>
                     <div>
                       <p className="text-gray-400">Courier</p>
-                      <p className="text-white">
-                        {selectedOrder.shiprocket?.courierName ||
-                          selectedOrder.shipping?.courierName ||
-                          (selectedOrder.shipping?.courierCompanyId
-                            ? `Courier #${selectedOrder.shipping.courierCompanyId}`
-                            : "—")}
-                      </p>
+                      {selectedOrder.shiprocket?.awbCode ? (
+                        <p className="text-white">{getCourierLabel(selectedOrder)}</p>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={openCourierModal}
+                          className="text-left text-blue-400 hover:text-blue-300 underline underline-offset-2"
+                        >
+                          {selectedCourierOption?.courierName || getCourierLabel(selectedOrder)} (change)
+                        </button>
+                      )}
                     </div>
                     <div>
                       <p className="text-gray-400">Live status</p>
                       <p className="text-white">{selectedOrder.shiprocket?.trackingStatus ?? "Awaiting webhook update"}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-400">Package weight</p>
+                      <p className="text-white">
+                        {Number.isFinite(Number(selectedOrder.shipping?.weightKg))
+                          ? `${Number(selectedOrder.shipping.weightKg).toFixed(3)} kg`
+                          : "0.500 kg"}
+                      </p>
                     </div>
                     <div>
                       <p className="text-gray-400">Last webhook</p>
@@ -402,13 +548,22 @@ function ShipmentsContent() {
                       </>
                     )}
                     <button
-                      onClick={cancelShipment}
+                      onClick={openCancelModal}
                       disabled={actionLoading}
                       className="bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium"
                     >
                       {actionLoading ? "..." : "Cancel shipment"}
                     </button>
                   </div>
+                  {!selectedOrder.shiprocket?.awbCode && selectedCourierOption && (
+                    <p className="text-xs text-gray-400 mt-3">
+                      Selected for AWB: {selectedCourierOption.courierName}
+                      {Number.isFinite(Number(selectedCourierOption.rate))
+                        ? ` · ${formatPrice(Number(selectedCourierOption.rate))}`
+                        : ""}
+                      {selectedCourierOption.etdDays ? ` · ETA ${selectedCourierOption.etdDays} day(s)` : ""}
+                    </p>
+                  )}
                   {selectedOrder.shiprocket?.labelUrl && (
                     <div className="mt-3">
                       <a
@@ -504,6 +659,190 @@ function ShipmentsContent() {
                             </div>
                           );
                         })()}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {courierModalOpen && selectedOrder && (
+                  <div
+                    className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70"
+                    onClick={(e) => e.target === e.currentTarget && setCourierModalOpen(false)}
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="shipment-courier-modal-title"
+                  >
+                    <div className="bg-gray-800 border border-gray-600 rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+                      <div className="p-4 border-b border-gray-700 flex justify-between items-center">
+                        <h2 id="shipment-courier-modal-title" className="text-lg font-semibold text-white">
+                          Choose courier before AWB assignment
+                        </h2>
+                        <button
+                          type="button"
+                          onClick={() => setCourierModalOpen(false)}
+                          className="text-gray-400 hover:text-white p-1 rounded"
+                          aria-label="Close"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      <div className="p-4 overflow-y-auto space-y-4 flex-1">
+                        <div className="bg-gray-900 border border-gray-700 rounded-lg p-3 text-sm">
+                          <p className="text-gray-400">Customer&apos;s courier choice</p>
+                          <p className="text-white mt-1">
+                            {customerCourierChoice?.courierName ||
+                              (customerCourierChoice?.courierCompanyId
+                                ? `Courier #${customerCourierChoice.courierCompanyId}`
+                                : selectedOrder.shipping?.courierName ||
+                                  (selectedOrder.shipping?.courierCompanyId
+                                    ? `Courier #${selectedOrder.shipping.courierCompanyId}`
+                                    : "No courier selected at checkout"))}
+                          </p>
+                        </div>
+
+                        {courierOptionsLoading && (
+                          <div className="text-gray-300 text-sm">Loading courier options...</div>
+                        )}
+
+                        {!courierOptionsLoading && courierOptionsError && (
+                          <div className="bg-red-900/30 border border-red-700 text-red-200 px-3 py-2 rounded text-sm">
+                            {courierOptionsError}
+                          </div>
+                        )}
+
+                        {!courierOptionsLoading && !courierOptionsError && courierOptions.length === 0 && (
+                          <p className="text-gray-400 text-sm">No courier options available for this shipment.</p>
+                        )}
+
+                        {!courierOptionsLoading && !courierOptionsError && courierOptions.length > 0 && (
+                          <div className="space-y-2">
+                            {courierOptions.map((opt) => {
+                              const isSelected = selectedCourierOption?.courierCompanyId === opt.courierCompanyId;
+                              const isCustomerChoice =
+                                Number(customerCourierChoice?.courierCompanyId || 0) > 0 &&
+                                Number(customerCourierChoice.courierCompanyId) === Number(opt.courierCompanyId);
+
+                              return (
+                                <button
+                                  key={`${opt.courierCompanyId}-${opt.courierName}`}
+                                  type="button"
+                                  onClick={() => setSelectedCourierOption(opt)}
+                                  className={`w-full text-left p-3 rounded-lg border transition ${
+                                    isSelected
+                                      ? "border-blue-500 bg-blue-900/20"
+                                      : "border-gray-700 bg-gray-900 hover:border-gray-500"
+                                  }`}
+                                >
+                                  <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <div>
+                                      <p className="text-white font-medium">{opt.courierName}</p>
+                                      <p className="text-xs text-gray-400">
+                                        {opt.etdDays ? `ETA ${opt.etdDays} day(s)` : "ETA unavailable"}
+                                      </p>
+                                    </div>
+                                    <div className="text-right">
+                                      <p className="text-white font-semibold">{formatPrice(Number(opt.rate) || 0)}</p>
+                                      {isCustomerChoice && (
+                                        <p className="text-xs text-emerald-300">Customer choice</p>
+                                      )}
+                                    </div>
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                      <div className="p-4 border-t border-gray-700 flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setCourierModalOpen(false)}
+                          className="px-4 py-2 rounded-lg text-sm bg-gray-700 hover:bg-gray-600 text-white"
+                        >
+                          Done
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {cancelModalOpen && selectedOrder && (
+                  <div
+                    className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70"
+                    onClick={(e) => e.target === e.currentTarget && setCancelModalOpen(false)}
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="shipment-cancel-modal-title"
+                  >
+                    <div className="bg-gray-800 border border-gray-600 rounded-xl shadow-2xl max-w-lg w-full overflow-hidden">
+                      <div className="p-4 border-b border-gray-700 flex justify-between items-center">
+                        <h2 id="shipment-cancel-modal-title" className="text-lg font-semibold text-white">
+                          Shipment cancellation
+                        </h2>
+                        <button
+                          type="button"
+                          onClick={() => setCancelModalOpen(false)}
+                          className="text-gray-400 hover:text-white p-1 rounded"
+                          aria-label="Close"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      <div className="p-4 space-y-4">
+                        <p className="text-sm text-gray-300">
+                          Select a cancellation reason. This will be recorded in shipment history. Cancelling shipment does not refund the customer or cancel the order.
+                        </p>
+                        <div>
+                          <label htmlFor="cancel-reason-option" className="block text-sm text-gray-300 mb-1">
+                            Reason
+                          </label>
+                          <select
+                            id="cancel-reason-option"
+                            value={cancelReasonOption}
+                            onChange={(e) => setCancelReasonOption(e.target.value)}
+                            className="w-full bg-gray-900 text-white px-3 py-2 rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-red-500"
+                          >
+                            {CANCEL_REASON_OPTIONS.map((opt) => (
+                              <option key={opt.value} value={opt.value}>
+                                {opt.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        {cancelReasonOption === "manual_entry" && (
+                          <div>
+                            <label htmlFor="cancel-reason-custom" className="block text-sm text-gray-300 mb-1">
+                              Manual reason
+                            </label>
+                            <input
+                              id="cancel-reason-custom"
+                              type="text"
+                              maxLength={160}
+                              value={cancelReasonCustom}
+                              onChange={(e) => setCancelReasonCustom(e.target.value)}
+                              placeholder="Enter cancellation reason"
+                              className="w-full bg-gray-900 text-white px-3 py-2 rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-red-500"
+                            />
+                          </div>
+                        )}
+                      </div>
+                      <div className="p-4 border-t border-gray-700 flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setCancelModalOpen(false)}
+                          className="px-4 py-2 rounded-lg text-sm bg-gray-700 hover:bg-gray-600 text-white"
+                          disabled={actionLoading}
+                        >
+                          Keep shipment
+                        </button>
+                        <button
+                          type="button"
+                          onClick={cancelShipment}
+                          disabled={actionLoading || (cancelReasonOption === "manual_entry" && !cancelReasonCustom.trim())}
+                          className="px-4 py-2 rounded-lg text-sm bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white"
+                        >
+                          {actionLoading ? "Cancelling..." : "Confirm cancel shipment"}
+                        </button>
                       </div>
                     </div>
                   </div>
