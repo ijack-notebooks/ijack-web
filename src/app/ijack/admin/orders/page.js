@@ -273,6 +273,18 @@ export default function AllOrders() {
     [...(Array.isArray(order?.shiprocket?.history) ? order.shiprocket.history : [])]
       .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
 
+  /** Shipments page only lists active shipments; hide deep link when none or shipment is cancelled. */
+  const shouldShowShipmentHistoryShipmentsLink = (order) => {
+    if (!order?.shiprocket?.orderId) return false;
+    if (order.shiprocket?.active === false) return false;
+    const history = Array.isArray(order?.shiprocket?.history) ? order.shiprocket.history : [];
+    const sorted = [...history].sort((a, b) => new Date(b.at) - new Date(a.at));
+    if (sorted[0]?.action === "shipment_cancelled") return false;
+    const label = String(getShipmentStatus(order).label || "").toLowerCase();
+    if (label.includes("cancel") && !label.includes("pickup")) return false;
+    return true;
+  };
+
   const formatShipmentAction = (action) =>
     String(action || "updated")
       .split("_")
@@ -1343,12 +1355,14 @@ export default function AllOrders() {
                   <p className="text-sm text-gray-400 mt-1 font-mono">
                     {shipmentHistoryOrder._id}
                   </p>
-                  <Link
-                    href={`/ijack/admin/shipments?orderId=${shipmentHistoryOrder._id}`}
-                    className="inline-block mt-3 text-sm font-medium text-blue-400 hover:text-blue-300"
-                  >
-                    Open in Shipments
-                  </Link>
+                  {shouldShowShipmentHistoryShipmentsLink(shipmentHistoryOrder) && (
+                    <Link
+                      href={`/ijack/admin/shipments?orderId=${shipmentHistoryOrder._id}`}
+                      className="inline-block mt-3 text-sm font-medium text-blue-400 hover:text-blue-300"
+                    >
+                      Open in Shipments
+                    </Link>
+                  )}
                 </div>
                 <button
                   onClick={() => setShipmentHistoryOrder(null)}
